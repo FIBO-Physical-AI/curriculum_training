@@ -1,0 +1,6 @@
+name: task_specific
+class: curriculum_rl.curricula.task_specific.TaskSpecificCurriculum
+params:
+  gamma: 0.7
+  seed_bin: 0
+  seed_range_m_per_s: [0.0, 0.5]

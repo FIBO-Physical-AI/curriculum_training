@@ -1,0 +1,23 @@
+[package]
+
+version = "0.1.0"
+
+category = "isaaclab"
+
+title = "Curriculum RL"
+author = "Phakin Boonchanachai"
+maintainer = "Phakin Boonchanachai"
+description = "Velocity-command curriculum learning strategies for Unitree Go2"
+keywords = ["extension", "isaaclab", "curriculum", "locomotion", "unitree"]
+
+[dependencies]
+"isaaclab" = {}
+"isaaclab_assets" = {}
+"isaaclab_rl" = {}
+"isaaclab_tasks" = {}
+"unitree_rl_lab" = {}
+
+[[python.module]]
+name = "curriculum_rl"
+
+[isaaclab_settings]

@@ -1,0 +1,3 @@
+name: uniform
+class: curriculum_rl.curricula.uniform.UniformCurriculum
+params: {}

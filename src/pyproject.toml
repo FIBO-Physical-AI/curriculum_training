@@ -1,0 +1,65 @@
+[build-system]
+requires = ["setuptools", "toml"]
+build-backend = "setuptools.build_meta"
+
+[tool.isort]
+atomic = true
+profile = "black"
+line_length = 120
+py_version = 310
+skip_glob = ["docs/*", "logs/*", "results/*"]
+group_by_package = true
+
+sections = [
+    "FUTURE",
+    "STDLIB",
+    "THIRDPARTY",
+    "ISAACLABPARTY",
+    "FIRSTPARTY",
+    "LOCALFOLDER",
+]
+extra_standard_library = [
+    "numpy",
+    "torch",
+    "matplotlib",
+    "gymnasium",
+    "gym",
+    "scipy",
+    "yaml",
+    "toml",
+    "tqdm",
+]
+known_thirdparty = [
+    "isaacsim.core.api",
+    "omni.replicator.core",
+    "pxr",
+    "omni.kit.*",
+    "warp",
+    "carb",
+]
+known_isaaclabparty = [
+    "isaaclab",
+    "isaaclab_tasks",
+    "isaaclab_assets",
+    "isaaclab_rl",
+]
+known_firstparty = ["curriculum_rl", "unitree_rl_lab"]
+known_local_folder = "config"
+
+[tool.pyright]
+exclude = [
+    "**/__pycache__",
+    "**/results",
+    "**/logs",
+    ".git",
+    ".vscode",
+]
+typeCheckingMode = "basic"
+pythonVersion = "3.10"
+pythonPlatform = "Linux"
+enableTypeIgnoreComments = true
+reportMissingImports = "none"
+reportMissingModuleSource = "none"
+reportGeneralTypeIssues = "none"
+reportOptionalMemberAccess = "warning"
+reportPrivateUsage = "warning"

@@ -1,0 +1,12 @@
+num_bins: 7
+bin_width: 0.5
+v_max: 3.5
+v_min: 0.0
+
+axis: lin_vel_x
+
+eval:
+  rollouts_per_bin: 100
+  command_mode: bin_center
+  domain_randomization: false
+  seeds_per_condition: 3

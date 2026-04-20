@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools", "wheel", "toml"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "curriculum_rl"
+version = "0.1.0"
+description = "Velocity-command curriculum learning strategies for Unitree Go2 on Isaac Lab"
+requires-python = ">=3.10"
+authors = [{ name = "Phakin Boonchanachai" }]
+dependencies = [
+    "numpy",
+    "pyyaml",
+    "matplotlib",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["curriculum_rl*"]

@@ -8,8 +8,8 @@ from unitree_rl_lab.tasks.locomotion.robots.go2.velocity_env_cfg import (
     RobotPlayEnvCfg,
 )
 
-V_MAX = 3.5
-NUM_BINS = 7
+V_MAX = 4.0
+NUM_BINS = 8
 BIN_WIDTH = V_MAX / NUM_BINS
 
 

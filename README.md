@@ -10,7 +10,9 @@ Training a single policy to track the full velocity range — from slow walk to 
 | Task-specific   | `Curriculum-Go2-Velocity-TaskSpec`  | Margolis et al. 2022 (Box Adaptive)   |
 | Teacher-guided  | `Curriculum-Go2-Velocity-Teacher`   | Li et al. 2026 (LP-ACRL)              |
 
-Evaluation follows proposal §7: per-bin mean return, EPTE-SP, task-sampling heatmap.
+Task space: `[0, 4.0]` m/s forward-velocity, split into 8 bins of width 0.5 m/s.
+
+Evaluation follows proposal §6: per-bin mean return, EPTE-SP, task-sampling heatmap, iterations-to-mastery.
 
 ## Repository layout
 
@@ -30,7 +32,7 @@ cd src/source/curriculum_rl
 pip install -e .
 
 cd ../../..
-python src/scripts/train.py --condition uniform --seed 0 --headless --max_iterations 1500
+python src/scripts/train.py --condition uniform --seed 0 --headless --max_iterations 3000
 python src/scripts/play.py  --condition uniform
 ```
 

@@ -20,7 +20,7 @@ src/
 │   └── curriculum_rl/
 │       ├── curricula/           3 sampling strategies (proposal §2.2–2.3)
 │       ├── envs/                Go2 velocity env + gym registrations
-│       ├── eval/                EPTE-SP, per-bin return, sampling heatmap (§7)
+│       ├── eval/                EPTE-SP, per-bin return, sampling heatmap, iterations-to-mastery (§6)
 │       └── figures/             plot scripts for the paper
 ├── configs/                     hyperparameters (proposal Appendix A Table 1)
 ├── scripts/                     train / eval / sweep / plot launchers
@@ -43,7 +43,7 @@ This also picks up `../../../unitree_rl_lab` as a dependency; install that first
 All launchers below `import curriculum_rl` (to trigger `gym.register`) and then hand off to the upstream `unitree_rl_lab/scripts/rsl_rl/{train,play}.py` via `runpy` in the same process. Nothing in `unitree_rl_lab/` is modified. Any flag not listed is passed through verbatim to the upstream script.
 
 ```bash
-python scripts/train.py --condition uniform       --seed 0 --headless --max_iterations 1500
+python scripts/train.py --condition uniform       --seed 0 --headless --max_iterations 3000
 python scripts/train.py --condition task_specific --seed 0 --headless
 python scripts/train.py --condition teacher       --seed 0 --headless
 

@@ -54,6 +54,7 @@ class BinnedVelocityCommand(UniformVelocityCommand):
                 beta=cfg.beta,
                 stage_length=cfg.stage_length,
                 eps=cfg.eps,
+                seed_bin=cfg.seed_bin,
             )
         raise ValueError(f"unknown curriculum_kind: {cfg.curriculum_kind}")
 
@@ -86,6 +87,6 @@ class BinnedVelocityCommandCfg(UniformLevelVelocityCommandCfg):
     gamma: float = 0.7
     seed_bin: int = 0
     min_episodes_per_bin: int = 50
-    beta: float = 0.1
+    beta: float = 0.05
     stage_length: int = 50
-    eps: float = 0.15
+    eps: float = 0.05

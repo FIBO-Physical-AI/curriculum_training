@@ -1,16 +1,6 @@
-===== SWEEP 2026-04-23 09:10:57 conditions=(uniform task_specific teacher) seeds=(1) I_max=3000 =====
-[START] uniform seed=1  at 2026-04-23 09:10:57
-[STOP]  uniform seed=1  at 2026-04-23 09:34:15  elapsed=1398s (0h23m18s)  rc=0
-  -> marker uniform_seed1.path = /home/drl-68/curriculum_training/unitree_rl_lab/logs/rsl_rl/curriculum_go2_velocity_uniform/2026-04-23_09-11-02
-[EVAL_START] uniform seed=1  at 2026-04-23 09:34:15
-[EVAL_STOP]  uniform seed=1  elapsed=21s
-[START] task_specific seed=1  at 2026-04-23 09:34:36
-[STOP]  task_specific seed=1  at 2026-04-23 09:58:03  elapsed=1407s (0h23m27s)  rc=0
-  -> marker task_specific_seed1.path = /home/drl-68/curriculum_training/unitree_rl_lab/logs/rsl_rl/curriculum_go2_velocity_taskspec/2026-04-23_09-34-41
-[EVAL_START] task_specific seed=1  at 2026-04-23 09:58:03
-[EVAL_STOP]  task_specific seed=1  elapsed=54s
-[START] teacher seed=1  at 2026-04-23 09:58:57
-[STOP]  teacher seed=1  at 2026-04-23 10:22:18  elapsed=1401s (0h23m21s)  rc=0
-  -> marker teacher_seed1.path = /home/drl-68/curriculum_training/unitree_rl_lab/logs/rsl_rl/curriculum_go2_velocity_teacher/2026-04-23_09-59-03
-[EVAL_START] teacher seed=1  at 2026-04-23 10:22:18
-[EVAL_STOP]  teacher seed=1  elapsed=21s
+===== SWEEP 2026-04-23 10:41:09 conditions=(teacher) seeds=(1) I_max=3000 =====
+[START] teacher seed=1  at 2026-04-23 10:41:09
+[STOP]  teacher seed=1  at 2026-04-23 11:04:03  elapsed=1374s (0h22m54s)  rc=0
+  -> marker teacher_seed1.path = /home/drl-68/curriculum_training/unitree_rl_lab/logs/rsl_rl/curriculum_go2_velocity_teacher/2026-04-23_10-41-14
+[EVAL_START] teacher seed=1  at 2026-04-23 11:04:03
+[EVAL_STOP]  teacher seed=1  elapsed=41s

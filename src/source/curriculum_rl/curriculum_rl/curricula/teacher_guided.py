@@ -22,14 +22,18 @@ class TeacherGuidedCurriculum(CurriculumBase):
         self,
         num_bins: int,
         v_max: float,
-        beta: float = 0.1,
+        beta: float = 0.05,
         stage_length: int = 50,
-        eps: float = 0.15,
+        eps: float = 0.05,
+        seed_bin: int = 0,
     ):
         super().__init__(num_bins=num_bins, v_max=v_max)
         self.beta = beta
         self.stage_length = stage_length
         self.eps = eps
+        self.seed_bin = int(seed_bin)
+        self.weights = np.zeros(num_bins, dtype=np.float64)
+        self.weights[self.seed_bin] = 1.0
         self.prev_rewards: np.ndarray = np.zeros(num_bins, dtype=np.float64)
         self.last_update_step: int = -1
         self._stage_sum: np.ndarray = np.zeros(num_bins, dtype=np.float64)
@@ -55,7 +59,7 @@ class TeacherGuidedCurriculum(CurriculumBase):
             self.prev_rewards = stage_avg.copy()
             self._warmed_up = True
             return
-        lp = np.abs(stage_avg - self.prev_rewards)
+        lp = np.maximum(stage_avg - self.prev_rewards, 0.0)
         scaled = lp / max(self.beta, 1e-8)
         scaled = scaled - scaled.max()
         exp = np.exp(scaled)

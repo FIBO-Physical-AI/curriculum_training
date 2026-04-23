@@ -41,11 +41,19 @@ class BinnedVelocityCommand(UniformVelocityCommand):
             return UniformCurriculum(num_bins=cfg.num_bins, v_max=cfg.v_max)
         if cfg.curriculum_kind == "task_specific":
             return TaskSpecificCurriculum(
-                num_bins=cfg.num_bins, v_max=cfg.v_max, gamma=cfg.gamma, seed_bin=cfg.seed_bin
+                num_bins=cfg.num_bins,
+                v_max=cfg.v_max,
+                gamma=cfg.gamma,
+                seed_bin=cfg.seed_bin,
+                min_episodes_per_bin=cfg.min_episodes_per_bin,
             )
         if cfg.curriculum_kind == "teacher":
             return TeacherGuidedCurriculum(
-                num_bins=cfg.num_bins, v_max=cfg.v_max, beta=cfg.beta, stage_length=cfg.stage_length
+                num_bins=cfg.num_bins,
+                v_max=cfg.v_max,
+                beta=cfg.beta,
+                stage_length=cfg.stage_length,
+                eps=cfg.eps,
             )
         raise ValueError(f"unknown curriculum_kind: {cfg.curriculum_kind}")
 
@@ -77,5 +85,7 @@ class BinnedVelocityCommandCfg(UniformLevelVelocityCommandCfg):
     curriculum_kind: str = "uniform"
     gamma: float = 0.7
     seed_bin: int = 0
-    beta: float = 0.3
-    stage_length: int = 100
+    min_episodes_per_bin: int = 50
+    beta: float = 0.1
+    stage_length: int = 50
+    eps: float = 0.15

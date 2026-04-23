@@ -23,7 +23,7 @@ def _make_binned_cmd(curriculum_kind: str, **kwargs) -> BinnedVelocityCommandCfg
     return BinnedVelocityCommandCfg(
         asset_name="robot",
         resampling_time_range=(20.0, 20.0),
-        rel_standing_envs=0.1,
+        rel_standing_envs=0.0,
         debug_vis=False,
         ranges=BinnedVelocityCommandCfg.Ranges(
             lin_vel_x=(0.0, V_MAX),

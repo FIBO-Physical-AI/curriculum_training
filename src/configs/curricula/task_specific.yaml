@@ -3,3 +3,4 @@ class: curriculum_rl.curricula.task_specific.TaskSpecificCurriculum
 params:
   gamma: 0.7
   seed_bin: 0
+  min_episodes_per_bin: 50

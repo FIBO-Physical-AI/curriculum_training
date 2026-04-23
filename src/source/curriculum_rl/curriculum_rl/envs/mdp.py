@@ -74,7 +74,7 @@ def _get_steps_per_ppo_iteration(env: "ManagerBasedRLEnv") -> int:
             return max(1, int(val))
         except ValueError:
             pass
-    return 24
+    return 48
 
 
 def velocity_curriculum_step(
@@ -90,17 +90,30 @@ def velocity_curriculum_step(
         _per_bin_reward_sum = torch.zeros(cmd.num_bins, device=env.device)
         _per_bin_reward_count = torch.zeros(cmd.num_bins, dtype=torch.long, device=env.device)
 
-    reward_cfg = env.reward_manager.get_term_cfg(reward_term_name)
-    episode_sums = env.reward_manager._episode_sums[reward_term_name]
-    K = float(env.max_episode_length)
-    per_env = (
-        episode_sums
-        / max(K, 1.0)
-        / max(float(reward_cfg.weight), 1e-6)
-    ).clamp(0.0, 1.0)
-    bins = cmd.env_bin_idx
-    _per_bin_reward_sum.scatter_add_(0, bins, per_env)
-    _per_bin_reward_count.scatter_add_(0, bins, torch.ones_like(bins))
+    if not isinstance(env_ids, torch.Tensor):
+        env_ids_t = torch.as_tensor(list(env_ids), dtype=torch.long, device=env.device)
+    else:
+        env_ids_t = env_ids.to(device=env.device, dtype=torch.long)
+
+    if env_ids_t.numel() > 0:
+        reward_cfg = env.reward_manager.get_term_cfg(reward_term_name)
+        episode_sums = env.reward_manager._episode_sums[reward_term_name][env_ids_t]
+        ep_len = env.episode_length_buf[env_ids_t].clamp(min=1).float()
+        per_env = (
+            episode_sums
+            / ep_len
+            / max(float(reward_cfg.weight), 1e-6)
+        )
+        bins = cmd.env_bin_idx[env_ids_t]
+        standing = getattr(cmd, "is_standing_env", None)
+        if standing is not None:
+            keep = ~standing[env_ids_t]
+            per_env = per_env[keep]
+            bins = bins[keep]
+        if per_env.numel() > 0:
+            per_env = per_env.clamp(0.0, 1.0)
+            _per_bin_reward_sum.scatter_add_(0, bins, per_env)
+            _per_bin_reward_count.scatter_add_(0, bins, torch.ones_like(bins))
 
     steps_per_iter = _get_steps_per_ppo_iteration(env)
     if env.common_step_counter == 0 or env.common_step_counter % steps_per_iter != 0:
@@ -113,7 +126,10 @@ def velocity_curriculum_step(
     per_bin_np = per_bin.detach().cpu().numpy()
     counts_np = counts.detach().cpu().numpy()
 
-    cmd.curriculum.update(per_bin_np, int(env.common_step_counter))
+    try:
+        cmd.curriculum.update(per_bin_np, int(env.common_step_counter), bin_counts=counts_np)
+    except TypeError:
+        cmd.curriculum.update(per_bin_np, int(env.common_step_counter))
     cmd.sync_weights_from_curriculum()
 
     weights_np = cmd.weights.detach().cpu().numpy()

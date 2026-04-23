@@ -1,5 +1,6 @@
 name: teacher_guided
 class: curriculum_rl.curricula.teacher_guided.TeacherGuidedCurriculum
 params:
-  beta: 0.3
-  stage_length: 100
+  beta: 0.1
+  stage_length: 50
+  eps: 0.15

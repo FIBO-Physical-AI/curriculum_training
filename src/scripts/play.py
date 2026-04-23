@@ -24,6 +24,12 @@ def build_argparser() -> argparse.ArgumentParser:
         required=True,
         choices=list(CONDITION_TO_TASK.keys()),
     )
+    parser.add_argument(
+        "--bin",
+        type=int,
+        default=None,
+        help="Force every env to this bin index (bin center velocity) for the whole rollout.",
+    )
     return parser
 
 
@@ -31,6 +37,9 @@ def main(argv: list[str] | None = None) -> int:
     argv = sys.argv[1:] if argv is None else list(argv)
     args, passthrough = build_argparser().parse_known_args(argv)
     task_id = CONDITION_TO_TASK[args.condition]
+
+    if args.bin is not None:
+        os.environ["CURRICULUM_PLAY_BIN"] = str(args.bin)
 
     import curriculum_rl  # noqa: F401
 

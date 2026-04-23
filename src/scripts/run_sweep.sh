@@ -16,6 +16,9 @@ MAX_ITERATIONS=${MAX_ITERATIONS:-15000}
 NUM_ENVS=${NUM_ENVS:-2048}
 VIDEO_ENVS=${VIDEO_ENVS:-1}
 VIDEO_LENGTH=${VIDEO_LENGTH:-400}
+NUM_BINS=${NUM_BINS:-6}
+V_MAX=${V_MAX:-3.0}
+RECORD_VIDEOS=${RECORD_VIDEOS:-1}
 STEPS_PER_ITER=${STEPS_PER_ITER:-48}
 export CURRICULUM_STEPS_PER_ITER="$STEPS_PER_ITER"
 
@@ -95,21 +98,51 @@ for condition in "${CONDITIONS[@]}"; do
             echo "FATAL: eval_epte.py ran but epte_sp.csv is empty/missing for ${condition} seed=${seed}" >&2
             exit 1
         fi
-    done
-done
 
-for condition in "${CONDITIONS[@]}"; do
-    for seed in "${SEEDS[@]}"; do
+        if [ "$RECORD_VIDEOS" != "1" ]; then
+            echo ""
+            echo "------ PLAY  ${condition} seed=${seed}  SKIPPED (RECORD_VIDEOS=${RECORD_VIDEOS})"
+            echo "[PLAY_SKIP]  ${condition} seed=${seed}" | tee -a "$TIMING_LOG"
+            continue
+        fi
+
         echo ""
-        echo "=========================================="
-        echo "PLAY   condition=${condition}  seed=${seed}  (recording ${VIDEO_LENGTH}-step video)"
-        echo "=========================================="
-        python src/scripts/play.py \
-            --condition "$condition" \
-            --num_envs "$VIDEO_ENVS" \
-            --video \
-            --video_length "$VIDEO_LENGTH" \
-            --headless
+        echo "------ PLAY  ${condition} seed=${seed}  (per-bin videos, ${NUM_BINS} bins, v_max=${V_MAX})"
+        play_start=$(date +%s)
+        echo "[PLAY_START] ${condition} seed=${seed}  at $(date '+%Y-%m-%d %H:%M:%S')" | tee -a "$TIMING_LOG"
+
+        bin_width=$(python -c "print($V_MAX / $NUM_BINS)")
+        video_dir="$latest/videos/play"
+
+        for B in $(seq 0 $((NUM_BINS-1))); do
+            v_center=$(python -c "print(round(($B + 0.5) * $bin_width, 3))")
+            echo ""
+            echo "  --- bin $B  v=${v_center} m/s"
+            python src/scripts/play.py \
+                --condition "$condition" \
+                --bin "$B" \
+                --num_envs "$VIDEO_ENVS" \
+                --video \
+                --video_length "$VIDEO_LENGTH" \
+                --headless
+            play_rc=$?
+            if [ "$play_rc" -ne 0 ]; then
+                echo "  WARN: play.py returned rc=$play_rc for bin $B (continuing)" >&2
+                continue
+            fi
+            if [ -d "$video_dir" ]; then
+                latest_mp4=$(ls -t "$video_dir"/*.mp4 2>/dev/null | grep -v "/bin[0-9]*_v" | head -1)
+                if [ -n "$latest_mp4" ]; then
+                    target="$video_dir/bin${B}_v${v_center}.mp4"
+                    mv -f "$latest_mp4" "$target"
+                    echo "  -> saved $target"
+                fi
+            fi
+        done
+
+        play_elapsed=$(( $(date +%s) - play_start ))
+        printf "[PLAY_STOP]  %s seed=%d  elapsed=%ds\n" "$condition" "$seed" "$play_elapsed" \
+            | tee -a "$TIMING_LOG"
     done
 done
 

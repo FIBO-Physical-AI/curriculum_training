@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from dataclasses import MISSING
 from typing import TYPE_CHECKING
 
@@ -67,9 +68,14 @@ class BinnedVelocityCommand(UniformVelocityCommand):
 
     def _resample_command(self, env_ids):
         n = len(env_ids)
-        w = self._weights_gpu.clamp(min=1e-12)
-        probs = w / w.sum()
-        bin_idx = torch.multinomial(probs, n, replacement=True)
+        forced = os.environ.get("CURRICULUM_PLAY_BIN")
+        if forced is not None and forced != "":
+            b = max(0, min(self.num_bins - 1, int(forced)))
+            bin_idx = torch.full((n,), b, dtype=torch.long, device=self.device)
+        else:
+            w = self._weights_gpu.clamp(min=1e-12)
+            probs = w / w.sum()
+            bin_idx = torch.multinomial(probs, n, replacement=True)
         self.env_bin_idx[env_ids] = bin_idx
         self.vel_command_b[env_ids, 0] = self.bin_centers[bin_idx]
         self.vel_command_b[env_ids, 1] = 0.0

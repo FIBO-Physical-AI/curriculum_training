@@ -6,7 +6,6 @@ __pycache__/
 build/
 dist/
 
-results/
 logs/
 outputs/
 wandb/

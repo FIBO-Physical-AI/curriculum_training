@@ -3,8 +3,10 @@ from __future__ import annotations
 from isaaclab.managers import CurriculumTermCfg as CurrTerm
 from isaaclab.managers import ObservationTermCfg as ObsTerm
 from isaaclab.managers import RewardTermCfg as RewTerm
+from isaaclab.managers import SceneEntityCfg
 from isaaclab.utils import configclass
 
+from unitree_rl_lab.tasks.locomotion import mdp as upstream_mdp
 from unitree_rl_lab.tasks.locomotion.robots.go2.velocity_env_cfg import (
     RobotEnvCfg,
     RobotPlayEnvCfg,
@@ -77,6 +79,40 @@ def _add_linear_velocity_bonus(cfg) -> None:
     )
 
 
+def _rebalance_penalties_for_fast_gaits(cfg) -> None:
+    cfg.rewards.base_linear_velocity.weight = -0.5
+    cfg.rewards.base_angular_velocity.weight = -0.01
+    cfg.rewards.joint_torques.weight = -1e-5
+    cfg.rewards.joint_vel.weight = -1e-4
+    cfg.rewards.action_rate.weight = -0.01
+    cfg.rewards.energy.weight = -1e-6
+    cfg.rewards.feet_air_time.weight = 1.0
+
+
+def _add_gait_shaping(cfg) -> None:
+    cfg.rewards.feet_gait = RewTerm(
+        func=upstream_mdp.feet_gait,
+        weight=0.5,
+        params={
+            "period": 0.4,
+            "offset": [0.0, 0.5, 0.5, 0.0],
+            "threshold": 0.5,
+            "command_name": "base_velocity",
+            "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot"),
+        },
+    )
+    cfg.rewards.feet_clearance = RewTerm(
+        func=upstream_mdp.foot_clearance_reward,
+        weight=0.5,
+        params={
+            "target_height": 0.08,
+            "std": 0.05,
+            "tanh_mult": 2.0,
+            "asset_cfg": SceneEntityCfg("robot", body_names=".*_foot"),
+        },
+    )
+
+
 def _trim_velocity_command_obs(cfg) -> None:
     term = ObsTerm(
         func=curriculum_mdp.forward_velocity_command,
@@ -99,6 +135,8 @@ class Go2VelocityBaseEnvCfg(RobotEnvCfg):
         _remove_yaw_tracking_reward(self)
         _add_linear_velocity_bonus(self)
         _tune_feet_air_time_for_fast_gaits(self)
+        _rebalance_penalties_for_fast_gaits(self)
+        _add_gait_shaping(self)
         _trim_velocity_command_obs(self)
         _apply_perf_trims(self)
         self.commands.base_velocity = _make_binned_cmd(self.curriculum_kind)
@@ -119,6 +157,8 @@ class Go2VelocityBasePlayEnvCfg(RobotPlayEnvCfg):
         _remove_yaw_tracking_reward(self)
         _add_linear_velocity_bonus(self)
         _tune_feet_air_time_for_fast_gaits(self)
+        _rebalance_penalties_for_fast_gaits(self)
+        _add_gait_shaping(self)
         _trim_velocity_command_obs(self)
         _apply_perf_trims(self)
         self.commands.base_velocity = _make_binned_cmd(self.curriculum_kind)

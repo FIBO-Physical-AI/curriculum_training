@@ -86,6 +86,9 @@ class BinnedVelocityCommand(UniformVelocityCommand):
 
 @configclass
 class BinnedVelocityCommandCfg(UniformLevelVelocityCommandCfg):
+    # NOTE: these defaults are authoritative. The yaml files under
+    # src/configs/curricula/ are currently documentation-only and are not
+    # loaded anywhere — change values here, not in the yaml.
     class_type: type = BinnedVelocityCommand
     num_bins: int = MISSING
     v_max: float = MISSING
@@ -95,4 +98,4 @@ class BinnedVelocityCommandCfg(UniformLevelVelocityCommandCfg):
     min_episodes_per_bin: int = 50
     beta: float = 0.05
     stage_length: int = 50
-    eps: float = 0.05
+    eps: float = 0.15

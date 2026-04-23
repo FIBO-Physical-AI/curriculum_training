@@ -7,11 +7,9 @@ from curriculum_rl.envs.go2_velocity_base import Go2VelocityBaseEnvCfg, Go2Veloc
 
 @configclass
 class UniformCurriculumEnvCfg(Go2VelocityBaseEnvCfg):
-    def __post_init__(self):
-        super().__post_init__()
+    curriculum_kind: str = "uniform"
 
 
 @configclass
 class UniformCurriculumPlayEnvCfg(Go2VelocityBasePlayEnvCfg):
-    def __post_init__(self):
-        super().__post_init__()
+    curriculum_kind: str = "uniform"

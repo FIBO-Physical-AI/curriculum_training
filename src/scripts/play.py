@@ -35,6 +35,7 @@ def main(argv: list[str] | None = None) -> int:
     import curriculum_rl  # noqa: F401
 
     os.chdir(REPO_ROOT / "unitree_rl_lab")
+    sys.path.insert(0, str(UPSTREAM.parent))
     sys.argv = [str(UPSTREAM), "--task", task_id, *passthrough]
     runpy.run_path(str(UPSTREAM), run_name="__main__")
     return 0

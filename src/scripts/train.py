@@ -24,6 +24,7 @@ def build_argparser() -> argparse.ArgumentParser:
         required=True,
         choices=list(CONDITION_TO_TASK.keys()),
     )
+    parser.add_argument("--seed", type=int, required=True)
     return parser
 
 
@@ -35,7 +36,10 @@ def main(argv: list[str] | None = None) -> int:
     import curriculum_rl  # noqa: F401
 
     os.chdir(REPO_ROOT / "unitree_rl_lab")
-    sys.argv = [str(UPSTREAM), "--task", task_id, *passthrough]
+    os.environ.pop("CURRICULUM_LOG_PATH", None)
+
+    sys.path.insert(0, str(UPSTREAM.parent))
+    sys.argv = [str(UPSTREAM), "--task", task_id, "--seed", str(args.seed), *passthrough]
     runpy.run_path(str(UPSTREAM), run_name="__main__")
     return 0
 

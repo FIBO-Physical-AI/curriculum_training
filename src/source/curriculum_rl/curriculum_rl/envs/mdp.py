@@ -26,6 +26,24 @@ def ang_vel_z_l2(env: "ManagerBasedRLEnv", asset_cfg=None) -> torch.Tensor:
     return torch.square(asset.data.root_ang_vel_b[:, 2])
 
 
+def track_lin_vel_x_linear(
+    env: "ManagerBasedRLEnv",
+    command_name: str = "base_velocity",
+    asset_cfg=None,
+) -> torch.Tensor:
+    from isaaclab.managers import SceneEntityCfg
+    if asset_cfg is None:
+        asset_cfg = SceneEntityCfg("robot")
+    asset = env.scene[asset_cfg.name]
+    cmd = env.command_manager.get_command(command_name)
+    v_cmd = cmd[:, 0]
+    v_act = asset.data.root_lin_vel_b[:, 0]
+    aligned = torch.clamp(v_act * torch.sign(v_cmd), min=0.0)
+    aligned = torch.minimum(aligned, torch.abs(v_cmd))
+    denom = torch.clamp(torch.abs(v_cmd), min=0.1)
+    return aligned / denom
+
+
 def forward_velocity_command(env: "ManagerBasedRLEnv", command_name: str = "base_velocity") -> torch.Tensor:
     cmd = env.command_manager.get_command(command_name)
     return cmd[:, 0:1]

@@ -14,8 +14,8 @@ from curriculum_rl.envs import mdp as curriculum_mdp
 from curriculum_rl.envs.commands import BinnedVelocityCommandCfg
 
 
-V_MAX = 4.0
-NUM_BINS = 8
+V_MAX = 3.0
+NUM_BINS = 6
 BIN_WIDTH = V_MAX / NUM_BINS
 
 
@@ -51,12 +51,7 @@ def _flatten_terrain(cfg) -> None:
 
 
 def _apply_perf_trims(cfg) -> None:
-    if hasattr(cfg.events, "push_robot"):
-        cfg.events.push_robot = None
-    if hasattr(cfg.events, "base_external_force_torque"):
-        cfg.events.base_external_force_torque = None
-    if hasattr(cfg.scene, "contact_forces") and cfg.scene.contact_forces is not None:
-        cfg.scene.contact_forces.history_length = 1
+    return
 
 
 def _remove_yaw_tracking_reward(cfg) -> None:
@@ -71,6 +66,15 @@ def _remove_yaw_tracking_reward(cfg) -> None:
 def _tune_feet_air_time_for_fast_gaits(cfg) -> None:
     if hasattr(cfg.rewards, "feet_air_time"):
         cfg.rewards.feet_air_time.params["threshold"] = 0.3
+
+
+def _add_linear_velocity_bonus(cfg) -> None:
+    cfg.rewards.track_lin_vel_xy.weight = 0.75
+    cfg.rewards.track_lin_vel_x_linear = RewTerm(
+        func=curriculum_mdp.track_lin_vel_x_linear,
+        weight=0.75,
+        params={"command_name": "base_velocity"},
+    )
 
 
 def _trim_velocity_command_obs(cfg) -> None:
@@ -93,6 +97,7 @@ class Go2VelocityBaseEnvCfg(RobotEnvCfg):
         super().__post_init__()
         _flatten_terrain(self)
         _remove_yaw_tracking_reward(self)
+        _add_linear_velocity_bonus(self)
         _tune_feet_air_time_for_fast_gaits(self)
         _trim_velocity_command_obs(self)
         _apply_perf_trims(self)
@@ -112,6 +117,7 @@ class Go2VelocityBasePlayEnvCfg(RobotPlayEnvCfg):
         super().__post_init__()
         _flatten_terrain(self)
         _remove_yaw_tracking_reward(self)
+        _add_linear_velocity_bonus(self)
         _tune_feet_air_time_for_fast_gaits(self)
         _trim_velocity_command_obs(self)
         _apply_perf_trims(self)

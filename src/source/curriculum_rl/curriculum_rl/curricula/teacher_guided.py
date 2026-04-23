@@ -34,6 +34,9 @@ class TeacherGuidedCurriculum(CurriculumBase):
         self.seed_bin = int(seed_bin)
         self.weights = np.zeros(num_bins, dtype=np.float64)
         self.weights[self.seed_bin] = 1.0
+        if self.seed_bin + 1 < num_bins:
+            self.weights[self.seed_bin + 1] = 0.5
+        self.weights /= self.weights.sum()
         self.prev_rewards: np.ndarray = np.zeros(num_bins, dtype=np.float64)
         self.last_update_step: int = -1
         self._stage_sum: np.ndarray = np.zeros(num_bins, dtype=np.float64)

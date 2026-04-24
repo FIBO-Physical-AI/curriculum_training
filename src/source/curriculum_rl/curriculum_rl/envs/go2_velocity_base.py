@@ -1,12 +1,8 @@
 from __future__ import annotations
 
 from isaaclab.managers import CurriculumTermCfg as CurrTerm
-from isaaclab.managers import ObservationTermCfg as ObsTerm
-from isaaclab.managers import RewardTermCfg as RewTerm
-from isaaclab.managers import SceneEntityCfg
 from isaaclab.utils import configclass
 
-from unitree_rl_lab.tasks.locomotion import mdp as upstream_mdp
 from unitree_rl_lab.tasks.locomotion.robots.go2.velocity_env_cfg import (
     RobotEnvCfg,
     RobotPlayEnvCfg,
@@ -16,7 +12,7 @@ from curriculum_rl.envs import mdp as curriculum_mdp
 from curriculum_rl.envs.commands import BinnedVelocityCommandCfg
 
 
-V_MAX = 4.0
+V_MAX = 3.0
 NUM_BINS = 8
 BIN_WIDTH = V_MAX / NUM_BINS
 
@@ -52,69 +48,6 @@ def _flatten_terrain(cfg) -> None:
         cfg.curriculum.terrain_levels = None
 
 
-def _apply_perf_trims(cfg) -> None:
-    return
-
-
-def _remove_yaw_tracking_reward(cfg) -> None:
-    if hasattr(cfg.rewards, "track_ang_vel_z"):
-        cfg.rewards.track_ang_vel_z.weight = 0.0
-    cfg.rewards.ang_vel_z_penalty = RewTerm(
-        func=curriculum_mdp.ang_vel_z_l2,
-        weight=-0.05,
-    )
-
-
-def _tune_feet_air_time_for_fast_gaits(cfg) -> None:
-    if hasattr(cfg.rewards, "feet_air_time"):
-        cfg.rewards.feet_air_time.params["threshold"] = 0.3
-
-
-def _add_tracking_bootstrap_bonus(cfg) -> None:
-    cfg.rewards.track_lin_vel_x_linear = RewTerm(
-        func=curriculum_mdp.track_lin_vel_x_linear,
-        weight=0.35,
-        params={"command_name": "base_velocity"},
-    )
-
-
-def _rebalance_penalties_for_fast_gaits(cfg) -> None:
-    cfg.rewards.track_lin_vel_xy.weight = 0.75
-    cfg.rewards.track_lin_vel_xy.params["std"] = 0.5
-    cfg.rewards.base_linear_velocity.weight = -0.5
-    cfg.rewards.base_angular_velocity.weight = -0.01
-    cfg.rewards.joint_torques.weight = -1e-5
-    cfg.rewards.joint_vel.weight = -1e-4
-    cfg.rewards.action_rate.weight = -0.01
-    cfg.rewards.energy.weight = -1e-6
-    cfg.rewards.feet_air_time.weight = 1.0
-
-
-def _add_gait_shaping(cfg) -> None:
-    cfg.rewards.feet_clearance = RewTerm(
-        func=upstream_mdp.foot_clearance_reward,
-        weight=0.5,
-        params={
-            "target_height": 0.08,
-            "std": 0.05,
-            "tanh_mult": 2.0,
-            "asset_cfg": SceneEntityCfg("robot", body_names=".*_foot"),
-        },
-    )
-
-
-def _trim_velocity_command_obs(cfg) -> None:
-    term = ObsTerm(
-        func=curriculum_mdp.forward_velocity_command,
-        clip=(-100, 100),
-        params={"command_name": "base_velocity"},
-    )
-    if hasattr(cfg.observations, "policy") and hasattr(cfg.observations.policy, "velocity_commands"):
-        cfg.observations.policy.velocity_commands = term
-    if hasattr(cfg.observations, "critic") and hasattr(cfg.observations.critic, "velocity_commands"):
-        cfg.observations.critic.velocity_commands = term
-
-
 @configclass
 class Go2VelocityBaseEnvCfg(RobotEnvCfg):
     curriculum_kind: str = "uniform"
@@ -122,13 +55,6 @@ class Go2VelocityBaseEnvCfg(RobotEnvCfg):
     def __post_init__(self):
         super().__post_init__()
         _flatten_terrain(self)
-        _remove_yaw_tracking_reward(self)
-        _tune_feet_air_time_for_fast_gaits(self)
-        _rebalance_penalties_for_fast_gaits(self)
-        _add_tracking_bootstrap_bonus(self)
-        _add_gait_shaping(self)
-        _trim_velocity_command_obs(self)
-        _apply_perf_trims(self)
         self.commands.base_velocity = _make_binned_cmd(self.curriculum_kind)
         self.curriculum.lin_vel_cmd_levels = None
         self.curriculum.velocity_curriculum = CurrTerm(
@@ -144,13 +70,6 @@ class Go2VelocityBasePlayEnvCfg(RobotPlayEnvCfg):
     def __post_init__(self):
         super().__post_init__()
         _flatten_terrain(self)
-        _remove_yaw_tracking_reward(self)
-        _tune_feet_air_time_for_fast_gaits(self)
-        _rebalance_penalties_for_fast_gaits(self)
-        _add_tracking_bootstrap_bonus(self)
-        _add_gait_shaping(self)
-        _trim_velocity_command_obs(self)
-        _apply_perf_trims(self)
         self.commands.base_velocity = _make_binned_cmd(self.curriculum_kind)
         self.commands.base_velocity.rel_standing_envs = 0.0
         if hasattr(self.curriculum, "lin_vel_cmd_levels"):

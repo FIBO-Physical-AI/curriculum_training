@@ -18,7 +18,7 @@ CONDITION="${1:?condition required: uniform|task_specific|teacher}"
 NUM_BINS="${2:-8}"
 VIDEO_LENGTH="${3:-400}"
 NUM_ENVS="${4:-1}"
-V_MAX="${V_MAX:-4.0}"
+V_MAX="${V_MAX:-3.0}"
 
 declare -A EXP_NAME=(
     [uniform]=curriculum_go2_velocity_uniform

@@ -11,8 +11,8 @@ exec > >(tee -a "$SWEEP_LOG") 2>&1
 echo "=== sweep script starting at $(date) — output captured to $SWEEP_LOG ==="
 
 CONDITIONS=(${CONDITIONS:-uniform task_specific teacher})
-SEEDS=(${SEEDS:-0 1 2})
-MAX_ITERATIONS=${MAX_ITERATIONS:-15000}
+SEEDS=(${SEEDS:-0})
+MAX_ITERATIONS=${MAX_ITERATIONS:-6000}
 NUM_ENVS=${NUM_ENVS:-2048}
 VIDEO_ENVS=${VIDEO_ENVS:-1}
 VIDEO_LENGTH=${VIDEO_LENGTH:-400}

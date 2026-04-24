@@ -17,7 +17,7 @@ def build_argparser() -> argparse.ArgumentParser:
     parser.add_argument("--logs-root", type=Path, default=Path("unitree_rl_lab/logs/rsl_rl"))
     parser.add_argument("--out-dir", type=Path, default=Path("src/results/figures"))
     parser.add_argument("--epte-csv", type=Path, default=Path("src/results/epte_sp.csv"))
-    parser.add_argument("--num-bins", type=int, default=6)
+    parser.add_argument("--num-bins", type=int, default=8)
     return parser
 
 

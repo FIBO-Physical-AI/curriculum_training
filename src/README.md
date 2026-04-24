@@ -10,6 +10,21 @@ This folder is an Isaac Lab extension that imports the upstream `unitree_rl_lab`
 | Task-specific   | `Curriculum-Go2-Velocity-TaskSpec`    | Margolis et al. 2022          |
 | Teacher-guided  | `Curriculum-Go2-Velocity-Teacher`     | Li et al. 2026 (LP-ACRL)      |
 
+Task space: `[0, 4.0]` m/s forward velocity, 8 bins of width 0.5 m/s. Set in [`envs/go2_velocity_base.py`](source/curriculum_rl/curriculum_rl/envs/go2_velocity_base.py) (`V_MAX`, `NUM_BINS`); mirrored in [`configs/task_space.yaml`](configs/task_space.yaml) and in the defaults of [`scripts/eval_epte.py`](scripts/eval_epte.py) and [`scripts/plot_all.py`](scripts/plot_all.py). The defaults in `envs/commands.py::BinnedVelocityCommandCfg` are authoritative for curriculum hyperparameters (ε floor, β, γ, seed bin); the yaml files under `configs/curricula/` are documentation-only.
+
+## Reward overrides on top of upstream
+
+All env configs inherit from `unitree_rl_lab.tasks.locomotion.robots.go2.velocity_env_cfg.RobotEnvCfg`. `Go2VelocityBaseEnvCfg.__post_init__` then applies, in order:
+
+- `_flatten_terrain` — plane terrain, no height scanner, no terrain curriculum (decouples curriculum signal from terrain difficulty).
+- `_remove_yaw_tracking_reward` — drops `track_ang_vel_z`, adds a small `ang_vel_z_l2` penalty (forward-only task).
+- `_tune_feet_air_time_for_fast_gaits` — air-time threshold 0.3 s.
+- `_rebalance_penalties_for_fast_gaits` — `track_lin_vel_xy = 0.75`, soften torques/energy/action-rate/joint-vel, keep `base_linear_velocity (z-bounce) = −0.5`.
+- `_add_gait_shaping` — `feet_gait` and `feet_clearance` (period 0.4 s, trot offset).
+- `_trim_velocity_command_obs` — observe forward-speed command only (`vel_command_b[:, 0]`), not the full 3-vector.
+
+Tracking uses **only** the Gaussian `track_lin_vel_xy` — the earlier `track_lin_vel_x_linear` partial-credit term was removed because it paid ~`v_act / v_cmd` of max reward regardless of command matching, which let a one-speed cruise policy collect reward across all bins and hid the curriculum signal. The function body lives in `envs/mdp.py` as dead code for easy re-enable if needed.
+
 ## Layout
 
 ```
@@ -58,6 +73,4 @@ python scripts/plot_all.py
 
 Logs land in `unitree_rl_lab/logs/rsl_rl/<experiment>/` because the launcher chdirs there (matching upstream convention).
 
-## Status
-
-Scaffold only — module bodies are empty. Fill in curriculum update rules, env overrides, eval metrics, and plotting.
+`run_sweep.sh` wraps train → `eval_epte.py` → per-bin `play.py` video → `plot_all.py` per (condition, seed). Honored env vars: `CONDITIONS`, `SEEDS`, `MAX_ITERATIONS`, `NUM_ENVS`, `NUM_BINS`, `V_MAX`, `RECORD_VIDEOS` (set to `0` to skip video recording). Per-bin videos are emitted by forcing the sampler via `CURRICULUM_PLAY_BIN`, set transparently when `play.py` is called with `--bin N`.

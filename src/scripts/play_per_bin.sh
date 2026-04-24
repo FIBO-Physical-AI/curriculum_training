@@ -4,7 +4,7 @@
 # Usage:
 #   bash src/scripts/play_per_bin.sh <condition> [num_bins] [video_length] [num_envs]
 # Example:
-#   bash src/scripts/play_per_bin.sh uniform 6 400 1
+#   bash src/scripts/play_per_bin.sh uniform 8 400 1
 #
 # Videos land in unitree_rl_lab/logs/rsl_rl/<exp>/<latest_run>/videos/play/
 # and are renamed to bin<i>_v<center>.mp4 between runs so they don't collide.
@@ -15,10 +15,10 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 cd "$PROJECT_ROOT"
 
 CONDITION="${1:?condition required: uniform|task_specific|teacher}"
-NUM_BINS="${2:-6}"
+NUM_BINS="${2:-8}"
 VIDEO_LENGTH="${3:-400}"
 NUM_ENVS="${4:-1}"
-V_MAX="${V_MAX:-3.0}"
+V_MAX="${V_MAX:-4.0}"
 
 declare -A EXP_NAME=(
     [uniform]=curriculum_go2_velocity_uniform

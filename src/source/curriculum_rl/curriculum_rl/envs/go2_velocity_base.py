@@ -16,8 +16,8 @@ from curriculum_rl.envs import mdp as curriculum_mdp
 from curriculum_rl.envs.commands import BinnedVelocityCommandCfg
 
 
-V_MAX = 3.0
-NUM_BINS = 6
+V_MAX = 4.0
+NUM_BINS = 8
 BIN_WIDTH = V_MAX / NUM_BINS
 
 
@@ -70,16 +70,8 @@ def _tune_feet_air_time_for_fast_gaits(cfg) -> None:
         cfg.rewards.feet_air_time.params["threshold"] = 0.3
 
 
-def _add_linear_velocity_bonus(cfg) -> None:
-    cfg.rewards.track_lin_vel_xy.weight = 0.75
-    cfg.rewards.track_lin_vel_x_linear = RewTerm(
-        func=curriculum_mdp.track_lin_vel_x_linear,
-        weight=0.75,
-        params={"command_name": "base_velocity"},
-    )
-
-
 def _rebalance_penalties_for_fast_gaits(cfg) -> None:
+    cfg.rewards.track_lin_vel_xy.weight = 0.75
     cfg.rewards.base_linear_velocity.weight = -0.5
     cfg.rewards.base_angular_velocity.weight = -0.01
     cfg.rewards.joint_torques.weight = -1e-5
@@ -133,7 +125,6 @@ class Go2VelocityBaseEnvCfg(RobotEnvCfg):
         super().__post_init__()
         _flatten_terrain(self)
         _remove_yaw_tracking_reward(self)
-        _add_linear_velocity_bonus(self)
         _tune_feet_air_time_for_fast_gaits(self)
         _rebalance_penalties_for_fast_gaits(self)
         _add_gait_shaping(self)
@@ -155,7 +146,6 @@ class Go2VelocityBasePlayEnvCfg(RobotPlayEnvCfg):
         super().__post_init__()
         _flatten_terrain(self)
         _remove_yaw_tracking_reward(self)
-        _add_linear_velocity_bonus(self)
         _tune_feet_air_time_for_fast_gaits(self)
         _rebalance_penalties_for_fast_gaits(self)
         _add_gait_shaping(self)

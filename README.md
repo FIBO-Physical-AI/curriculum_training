@@ -12,6 +12,8 @@ Training a single policy to track the full velocity range — from slow walk to 
 
 Task space: `[0, 4.0]` m/s forward-velocity, split into 8 bins of width 0.5 m/s.
 
+Reward shape (on top of the upstream `unitree_rl_lab` Go2 velocity env): yaw-tracking disabled (forward-only task), Gaussian `track_lin_vel_xy` as the sole tracking signal, soft penalty rebalance for fast gaits, and gait shaping (`feet_air_time`, `feet_gait`, `feet_clearance`). No linear partial-credit on forward velocity — tracking reward drops sharply when the actual speed misses the command, so a cruise-at-comfortable-speed policy cannot collect reward across all bins.
+
 Evaluation follows proposal §6: per-bin mean return, EPTE-SP, task-sampling heatmap, iterations-to-mastery.
 
 ## Repository layout

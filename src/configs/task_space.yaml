@@ -1,6 +1,6 @@
-num_bins: 6
+num_bins: 8
 bin_width: 0.5
-v_max: 3.0
+v_max: 4.0
 v_min: 0.0
 
 axis: lin_vel_x

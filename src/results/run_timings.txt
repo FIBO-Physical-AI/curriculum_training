@@ -1,20 +1,64 @@
-===== SWEEP 2026-04-23 18:50:54 conditions=(uniform task_specific teacher) seeds=(0) I_max=300 =====
-[START] uniform seed=0  at 2026-04-23 18:50:54
-[EVAL_STOP]  teacher seed=0  elapsed=207s
-[STOP]  uniform seed=0  at 2026-04-23 18:57:49  elapsed=415s (0h06m55s)  rc=0
-  -> marker uniform_seed0.path = /home/drl-68/curriculum_training/unitree_rl_lab/logs/rsl_rl/curriculum_go2_velocity_uniform/2026-04-23_18-50-59
-[EVAL_START] uniform seed=0  at 2026-04-23 18:57:49
-[EVAL_STOP]  uniform seed=0  elapsed=160s
-[PLAY_SKIP]  uniform seed=0
-[START] task_specific seed=0  at 2026-04-23 19:00:29
-[STOP]  task_specific seed=0  at 2026-04-23 19:06:44  elapsed=375s (0h06m15s)  rc=0
-  -> marker task_specific_seed0.path = /home/drl-68/curriculum_training/unitree_rl_lab/logs/rsl_rl/curriculum_go2_velocity_taskspec/2026-04-23_19-00-35
-[EVAL_START] task_specific seed=0  at 2026-04-23 19:06:44
-[EVAL_STOP]  task_specific seed=0  elapsed=162s
-[PLAY_SKIP]  task_specific seed=0
-[START] teacher seed=0  at 2026-04-23 19:09:26
-[STOP]  teacher seed=0  at 2026-04-23 19:15:33  elapsed=367s (0h06m07s)  rc=0
-  -> marker teacher_seed0.path = /home/drl-68/curriculum_training/unitree_rl_lab/logs/rsl_rl/curriculum_go2_velocity_teacher/2026-04-23_19-09-31
-[EVAL_START] teacher seed=0  at 2026-04-23 19:15:33
-[EVAL_STOP]  teacher seed=0  elapsed=134s
-[PLAY_SKIP]  teacher seed=0
+===== SWEEP 2026-04-23 19:23:55 conditions=(uniform task_specific teacher) seeds=(0 1 2) I_max=6000 =====
+[START] uniform seed=0  at 2026-04-23 19:23:55
+[STOP]  uniform seed=0  at 2026-04-23 20:14:43  elapsed=3048s (0h50m48s)  rc=0
+  -> marker uniform_seed0.path = /home/drl-68/curriculum_training/unitree_rl_lab/logs/rsl_rl/curriculum_go2_velocity_uniform/2026-04-23_19-24-00
+[EVAL_START] uniform seed=0  at 2026-04-23 20:14:43
+[EVAL_STOP]  uniform seed=0  elapsed=78s
+[PLAY_START] uniform seed=0  at 2026-04-23 20:16:01
+[PLAY_STOP]  uniform seed=0  elapsed=155s
+[START] uniform seed=1  at 2026-04-23 20:18:36
+[STOP]  uniform seed=1  at 2026-04-23 21:27:51  elapsed=4155s (1h09m15s)  rc=0
+  -> marker uniform_seed1.path = /home/drl-68/curriculum_training/unitree_rl_lab/logs/rsl_rl/curriculum_go2_velocity_uniform/2026-04-23_20-18-41
+[EVAL_START] uniform seed=1  at 2026-04-23 21:27:51
+[EVAL_STOP]  uniform seed=1  elapsed=162s
+[PLAY_START] uniform seed=1  at 2026-04-23 21:30:33
+[PLAY_STOP]  uniform seed=1  elapsed=192s
+[START] uniform seed=2  at 2026-04-23 21:33:45
+[STOP]  uniform seed=2  at 2026-04-23 23:08:56  elapsed=5711s (1h35m11s)  rc=0
+  -> marker uniform_seed2.path = /home/drl-68/curriculum_training/unitree_rl_lab/logs/rsl_rl/curriculum_go2_velocity_uniform/2026-04-23_21-33-50
+[EVAL_START] uniform seed=2  at 2026-04-23 23:08:56
+[EVAL_STOP]  uniform seed=2  elapsed=77s
+[PLAY_START] uniform seed=2  at 2026-04-23 23:10:13
+[PLAY_STOP]  uniform seed=2  elapsed=156s
+[START] task_specific seed=0  at 2026-04-23 23:12:49
+[STOP]  task_specific seed=0  at 2026-04-24 00:04:36  elapsed=3107s (0h51m47s)  rc=0
+  -> marker task_specific_seed0.path = /home/drl-68/curriculum_training/unitree_rl_lab/logs/rsl_rl/curriculum_go2_velocity_taskspec/2026-04-23_23-12-54
+[EVAL_START] task_specific seed=0  at 2026-04-24 00:04:36
+[EVAL_STOP]  task_specific seed=0  elapsed=78s
+[PLAY_START] task_specific seed=0  at 2026-04-24 00:05:54
+[PLAY_STOP]  task_specific seed=0  elapsed=156s
+[START] task_specific seed=1  at 2026-04-24 00:08:30
+[STOP]  task_specific seed=1  at 2026-04-24 02:06:01  elapsed=7051s (1h57m31s)  rc=0
+  -> marker task_specific_seed1.path = /home/drl-68/curriculum_training/unitree_rl_lab/logs/rsl_rl/curriculum_go2_velocity_taskspec/2026-04-24_00-08-35
+[EVAL_START] task_specific seed=1  at 2026-04-24 02:06:01
+[EVAL_STOP]  task_specific seed=1  elapsed=127s
+[PLAY_START] task_specific seed=1  at 2026-04-24 02:08:08
+[PLAY_STOP]  task_specific seed=1  elapsed=165s
+[START] task_specific seed=2  at 2026-04-24 02:10:53
+[STOP]  task_specific seed=2  at 2026-04-24 03:10:32  elapsed=3579s (0h59m39s)  rc=0
+  -> marker task_specific_seed2.path = /home/drl-68/curriculum_training/unitree_rl_lab/logs/rsl_rl/curriculum_go2_velocity_taskspec/2026-04-24_02-10-58
+[EVAL_START] task_specific seed=2  at 2026-04-24 03:10:32
+[EVAL_STOP]  task_specific seed=2  elapsed=81s
+[PLAY_START] task_specific seed=2  at 2026-04-24 03:11:53
+[PLAY_STOP]  task_specific seed=2  elapsed=187s
+[START] teacher seed=0  at 2026-04-24 03:15:00
+[STOP]  teacher seed=0  at 2026-04-24 04:19:30  elapsed=3870s (1h04m30s)  rc=0
+  -> marker teacher_seed0.path = /home/drl-68/curriculum_training/unitree_rl_lab/logs/rsl_rl/curriculum_go2_velocity_teacher/2026-04-24_03-15-06
+[EVAL_START] teacher seed=0  at 2026-04-24 04:19:30
+[EVAL_STOP]  teacher seed=0  elapsed=171s
+[PLAY_START] teacher seed=0  at 2026-04-24 04:22:21
+[PLAY_STOP]  teacher seed=0  elapsed=205s
+[START] teacher seed=1  at 2026-04-24 04:25:46
+[STOP]  teacher seed=1  at 2026-04-24 05:46:29  elapsed=4843s (1h20m43s)  rc=0
+  -> marker teacher_seed1.path = /home/drl-68/curriculum_training/unitree_rl_lab/logs/rsl_rl/curriculum_go2_velocity_teacher/2026-04-24_04-25-51
+[EVAL_START] teacher seed=1  at 2026-04-24 05:46:29
+[EVAL_STOP]  teacher seed=1  elapsed=79s
+[PLAY_START] teacher seed=1  at 2026-04-24 05:47:48
+[PLAY_STOP]  teacher seed=1  elapsed=157s
+[START] teacher seed=2  at 2026-04-24 05:50:25
+[STOP]  teacher seed=2  at 2026-04-24 06:40:33  elapsed=3008s (0h50m08s)  rc=0
+  -> marker teacher_seed2.path = /home/drl-68/curriculum_training/unitree_rl_lab/logs/rsl_rl/curriculum_go2_velocity_teacher/2026-04-24_05-50-30
+[EVAL_START] teacher seed=2  at 2026-04-24 06:40:33
+[EVAL_STOP]  teacher seed=2  elapsed=78s
+[PLAY_START] teacher seed=2  at 2026-04-24 06:41:51
+[PLAY_STOP]  teacher seed=2  elapsed=158s

@@ -73,7 +73,7 @@ def _tune_feet_air_time_for_fast_gaits(cfg) -> None:
 def _add_tracking_bootstrap_bonus(cfg) -> None:
     cfg.rewards.track_lin_vel_x_linear = RewTerm(
         func=curriculum_mdp.track_lin_vel_x_linear,
-        weight=0.15,
+        weight=0.35,
         params={"command_name": "base_velocity"},
     )
 

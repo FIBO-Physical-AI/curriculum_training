@@ -62,7 +62,7 @@ class TeacherGuidedCurriculum(CurriculumBase):
             self.prev_rewards = stage_avg.copy()
             self._warmed_up = True
             return
-        lp = np.maximum(stage_avg - self.prev_rewards, 0.0)
+        lp = stage_avg - self.prev_rewards
         scaled = lp / max(self.beta, 1e-8)
         scaled = scaled - scaled.max()
         exp = np.exp(scaled)

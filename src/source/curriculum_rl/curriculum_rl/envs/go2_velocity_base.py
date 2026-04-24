@@ -91,17 +91,6 @@ def _rebalance_penalties_for_fast_gaits(cfg) -> None:
 
 
 def _add_gait_shaping(cfg) -> None:
-    cfg.rewards.feet_gait = RewTerm(
-        func=upstream_mdp.feet_gait,
-        weight=0.5,
-        params={
-            "period": 0.4,
-            "offset": [0.0, 0.5, 0.5, 0.0],
-            "threshold": 0.5,
-            "command_name": "base_velocity",
-            "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot"),
-        },
-    )
     cfg.rewards.feet_clearance = RewTerm(
         func=upstream_mdp.foot_clearance_reward,
         weight=0.5,

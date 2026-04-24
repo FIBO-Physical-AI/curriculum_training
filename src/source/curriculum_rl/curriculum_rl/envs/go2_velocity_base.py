@@ -74,12 +74,13 @@ def _add_tracking_bootstrap_bonus(cfg) -> None:
     cfg.rewards.track_lin_vel_x_linear = RewTerm(
         func=curriculum_mdp.track_lin_vel_x_linear,
         weight=0.35,
-        params={"command_name": "base_velocity"},
+        params={"command_name": "base_velocity", "v_max": V_MAX},
     )
 
 
 def _rebalance_penalties_for_fast_gaits(cfg) -> None:
     cfg.rewards.track_lin_vel_xy.weight = 0.75
+    cfg.rewards.track_lin_vel_xy.params["std"] = 1.0
     cfg.rewards.base_linear_velocity.weight = -0.5
     cfg.rewards.base_angular_velocity.weight = -0.01
     cfg.rewards.joint_torques.weight = -1e-5

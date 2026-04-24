@@ -70,6 +70,14 @@ def _tune_feet_air_time_for_fast_gaits(cfg) -> None:
         cfg.rewards.feet_air_time.params["threshold"] = 0.3
 
 
+def _add_tracking_bootstrap_bonus(cfg) -> None:
+    cfg.rewards.track_lin_vel_x_linear = RewTerm(
+        func=curriculum_mdp.track_lin_vel_x_linear,
+        weight=0.15,
+        params={"command_name": "base_velocity"},
+    )
+
+
 def _rebalance_penalties_for_fast_gaits(cfg) -> None:
     cfg.rewards.track_lin_vel_xy.weight = 0.75
     cfg.rewards.base_linear_velocity.weight = -0.5
@@ -127,6 +135,7 @@ class Go2VelocityBaseEnvCfg(RobotEnvCfg):
         _remove_yaw_tracking_reward(self)
         _tune_feet_air_time_for_fast_gaits(self)
         _rebalance_penalties_for_fast_gaits(self)
+        _add_tracking_bootstrap_bonus(self)
         _add_gait_shaping(self)
         _trim_velocity_command_obs(self)
         _apply_perf_trims(self)
@@ -148,6 +157,7 @@ class Go2VelocityBasePlayEnvCfg(RobotPlayEnvCfg):
         _remove_yaw_tracking_reward(self)
         _tune_feet_air_time_for_fast_gaits(self)
         _rebalance_penalties_for_fast_gaits(self)
+        _add_tracking_bootstrap_bonus(self)
         _add_gait_shaping(self)
         _trim_velocity_command_obs(self)
         _apply_perf_trims(self)

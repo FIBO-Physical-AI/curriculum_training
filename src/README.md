@@ -23,7 +23,10 @@ All env configs inherit from `unitree_rl_lab.tasks.locomotion.robots.go2.velocit
 - `_add_gait_shaping` — `feet_gait` and `feet_clearance` (period 0.4 s, trot offset).
 - `_trim_velocity_command_obs` — observe forward-speed command only (`vel_command_b[:, 0]`), not the full 3-vector.
 
-Tracking uses **only** the Gaussian `track_lin_vel_xy` — the earlier `track_lin_vel_x_linear` partial-credit term was removed because it paid ~`v_act / v_cmd` of max reward regardless of command matching, which let a one-speed cruise policy collect reward across all bins and hid the curriculum signal. The function body lives in `envs/mdp.py` as dead code for easy re-enable if needed.
+Tracking combines a Gaussian term and a small linear bootstrap bonus:
+
+- `track_lin_vel_xy` (weight **0.75**, Gaussian) — primary reward, peaks when actual speed matches the command, falls off fast for being wrong.
+- `track_lin_vel_x_linear` (weight **0.15**, linear partial-credit of `v_act / v_cmd`) — kept only as a bootstrap aid. At weight 0.75 this term let a cruise-at-2-m/s policy collect ~57% of max reward on bin 7 and ignore the command (we confirmed this by removing it: uniform failed to learn to walk at all within 300 iters because the pure Gaussian gave near-zero gradient for a random policy). At weight 0.15 the cruise cheat pays only ~0.09 reward while matching the command pays 0.75 from the Gaussian — ~9× penalty for cruising — but the linear term still provides enough dense signal early in training for a random policy to discover that moving forward earns reward.
 
 ## Layout
 

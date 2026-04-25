@@ -49,13 +49,22 @@ def _flatten_terrain(cfg) -> None:
 
 
 def _apply_sprint_retune(cfg) -> None:
-    cfg.rewards.track_lin_vel_xy.params["std"] = 1.0
+    cfg.rewards.track_lin_vel_xy.params["std"] = 0.5
     cfg.rewards.action_rate.weight = -0.005
     cfg.rewards.joint_acc.weight = -1e-7
     cfg.rewards.joint_torques.weight = -2e-5
     cfg.rewards.joint_vel.weight = -1e-4
     cfg.rewards.feet_air_time.params["threshold"] = 0.1
     cfg.actions.JointPositionAction.scale = 0.35
+
+
+def _lock_play_pose(cfg) -> None:
+    if hasattr(cfg.events, "reset_base"):
+        cfg.events.reset_base.params["pose_range"] = {
+            "x": (0.0, 0.0),
+            "y": (0.0, 0.0),
+            "yaw": (0.0, 0.0),
+        }
 
 
 @configclass
@@ -82,6 +91,7 @@ class Go2VelocityBasePlayEnvCfg(RobotPlayEnvCfg):
         super().__post_init__()
         _flatten_terrain(self)
         _apply_sprint_retune(self)
+        _lock_play_pose(self)
         self.commands.base_velocity = _make_binned_cmd(self.curriculum_kind)
         self.commands.base_velocity.rel_standing_envs = 0.0
         if hasattr(self.curriculum, "lin_vel_cmd_levels"):

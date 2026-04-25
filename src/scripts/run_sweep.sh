@@ -162,12 +162,40 @@ if [ -s "$PROJECT_ROOT/src/results/epte_sp.csv" ]; then
     awk -F, 'NR>1 {sum[$1]+=$7; n[$1]++} END {for (k in sum) printf "  %-15s %.3f  (n=%d)\n", k, sum[k]/n[k], n[k]}' \
         "$PROJECT_ROOT/src/results/epte_sp.csv" | sort
     echo ""
-    echo "--- per-bin diagnostic (cond bin  fall  err  epte  early/100) ---"
-    awk -F, 'NR>1 {key=$1"|"$3; fall[key]+=$5; err[key]+=$6; epte[key]+=$7; n[key]++; if($5<999)e[key]++} END {for(k in n){split(k,a,"|"); printf "  %-15s b%s  fall=%6.1f  err=%.3f  epte=%.3f  early=%d/%d\n", a[1], a[2], fall[k]/n[k], err[k]/n[k], epte[k]/n[k], e[k]+0, n[k]}}' \
+    echo "--- per-bin diagnostic (cond bin  fall  err  epte  v_act_signed  early/100) ---"
+    awk -F, 'NR>1 {key=$1"|"$3; fall[key]+=$5; err[key]+=$6; epte[key]+=$7; vsig[key]+=$9; n[key]++; if($5<999)e[key]++} END {for(k in n){split(k,a,"|"); printf "  %-15s b%s  fall=%6.1f  err=%.3f  epte=%.3f  v_act=%+5.2f  early=%d/%d\n", a[1], a[2], fall[k]/n[k], err[k]/n[k], epte[k]/n[k], vsig[k]/n[k], e[k]+0, n[k]}}' \
         "$PROJECT_ROOT/src/results/epte_sp.csv" | sort
 else
     echo "  (no epte_sp.csv found)"
 fi
+
+echo ""
+echo "=========================================="
+echo "CURRICULUM STATE (final weights per bin)"
+echo "=========================================="
+for condition in "${CONDITIONS[@]}"; do
+    exp_name="${EXP_NAME[$condition]}"
+    marker_file="$PROJECT_ROOT/.sweep_runs/${condition}_seed${SEEDS[0]}.path"
+    if [ -f "$marker_file" ]; then
+        run_dir=$(cat "$marker_file")
+        curr_csv="$run_dir/curriculum.csv"
+        if [ -s "$curr_csv" ]; then
+            echo ""
+            echo "--- $condition (last iter) ---"
+            python -c "
+import csv, sys
+rows = list(csv.reader(open('$curr_csv')))[1:]
+if not rows: sys.exit()
+last_step = max(int(r[0]) for r in rows)
+last = [r for r in rows if int(r[0]) == last_step]
+last.sort(key=lambda r: int(r[1]))
+print(f'  step {last_step}: ' + '  '.join(f'b{r[1]}={float(r[2]):.2f}' for r in last))
+print(f'  rewards    : ' + '  '.join(f'b{r[1]}={float(r[3]):.2f}' for r in last))
+print(f'  n_samples  : ' + '  '.join(f'b{r[1]}={r[4]}' for r in last))
+"
+        fi
+    fi
+done
 
 echo ""
 echo ">>> sweep done. checkpoints + videos in unitree_rl_lab/logs/rsl_rl/*/"

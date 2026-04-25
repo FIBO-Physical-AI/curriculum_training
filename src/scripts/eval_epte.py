@@ -82,13 +82,15 @@ def run(args: argparse.Namespace) -> int:
     with args.out_csv.open("a", newline="") as fh:
         writer = csv.writer(fh)
         if new_file:
-            writer.writerow(["condition", "seed", "bin_idx", "rollout", "fall_step", "tracking_error", "epte_sp"])
+            writer.writerow(["condition", "seed", "bin_idx", "rollout", "fall_step", "tracking_error", "epte_sp", "v_x_mean", "v_x_signed_mean"])
 
         cmd_term = env.unwrapped.command_manager.get_term("base_velocity")
         for b in range(args.num_bins):
             v = (b + 0.5) * bin_width
             fall_step = torch.full((args.rollouts_per_bin,), args.episode_steps, dtype=torch.long, device=env.unwrapped.device)
             err_sum = torch.zeros(args.rollouts_per_bin, device=env.unwrapped.device)
+            v_abs_sum = torch.zeros(args.rollouts_per_bin, device=env.unwrapped.device)
+            v_signed_sum = torch.zeros(args.rollouts_per_bin, device=env.unwrapped.device)
             alive = torch.ones(args.rollouts_per_bin, dtype=torch.bool, device=env.unwrapped.device)
 
             reset_result = env.reset()
@@ -106,8 +108,11 @@ def run(args: argparse.Namespace) -> int:
                 cmd_term.vel_command_b[:, 1] = 0.0
                 cmd_term.vel_command_b[:, 2] = 0.0
 
-                lin_err = torch.abs(env.unwrapped.scene["robot"].data.root_lin_vel_b[:, 0] - v)
+                v_act = env.unwrapped.scene["robot"].data.root_lin_vel_b[:, 0]
+                lin_err = torch.abs(v_act - v)
                 err_sum[alive] += lin_err[alive]
+                v_abs_sum[alive] += torch.abs(v_act[alive])
+                v_signed_sum[alive] += v_act[alive]
 
                 fall_mask = dones.bool() & alive
                 fall_step[fall_mask] = step
@@ -116,14 +121,27 @@ def run(args: argparse.Namespace) -> int:
                     break
 
             K = args.episode_steps
-            err_norm = (err_sum / fall_step.clamp(min=1).float() / max(v, 1e-6)).clamp(0.0, 1.0)
+            denom = fall_step.clamp(min=1).float()
+            err_norm = (err_sum / denom / max(v, 1e-6)).clamp(0.0, 1.0)
+            v_x_mean = v_abs_sum / denom
+            v_x_signed_mean = v_signed_sum / denom
             k_f = fall_step.clone().clamp(0, K)
             epte = (err_norm * k_f.float() + (K - k_f).float()) / K
             for i in range(args.rollouts_per_bin):
-                writer.writerow([args.condition, args.seed, b, i, int(k_f[i].item()), float(err_norm[i].item()), float(epte[i].item())])
+                writer.writerow([
+                    args.condition, args.seed, b, i,
+                    int(k_f[i].item()),
+                    float(err_norm[i].item()),
+                    float(epte[i].item()),
+                    float(v_x_mean[i].item()),
+                    float(v_x_signed_mean[i].item()),
+                ])
 
             early_term = int((k_f < K - 1).sum())
-            print(f"[eval_epte] bin {b}  v={v:.2f}  mean EPTE={float(epte.mean()):.3f}  (early_term={early_term}/{args.rollouts_per_bin})")
+            print(
+                f"[eval_epte] bin {b}  v_cmd={v:.2f}  v_act={float(v_x_signed_mean.mean()):+.2f}  "
+                f"EPTE={float(epte.mean()):.3f}  early={early_term}/{args.rollouts_per_bin}"
+            )
 
     env.close()
     app.close()

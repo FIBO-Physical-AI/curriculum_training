@@ -153,5 +153,22 @@ echo "=========================================="
 python src/scripts/plot_all.py
 
 echo ""
+echo "=========================================="
+echo "EPTE SUMMARY"
+echo "=========================================="
+if [ -s "$PROJECT_ROOT/src/results/epte_sp.csv" ]; then
+    echo ""
+    echo "--- mean EPTE per condition ---"
+    awk -F, 'NR>1 {sum[$1]+=$7; n[$1]++} END {for (k in sum) printf "  %-15s %.3f  (n=%d)\n", k, sum[k]/n[k], n[k]}' \
+        "$PROJECT_ROOT/src/results/epte_sp.csv" | sort
+    echo ""
+    echo "--- per-bin diagnostic (cond bin  fall  err  epte  early/100) ---"
+    awk -F, 'NR>1 {key=$1"|"$3; fall[key]+=$5; err[key]+=$6; epte[key]+=$7; n[key]++; if($5<999)e[key]++} END {for(k in n){split(k,a,"|"); printf "  %-15s b%s  fall=%6.1f  err=%.3f  epte=%.3f  early=%d/%d\n", a[1], a[2], fall[k]/n[k], err[k]/n[k], epte[k]/n[k], e[k]+0, n[k]}}' \
+        "$PROJECT_ROOT/src/results/epte_sp.csv" | sort
+else
+    echo "  (no epte_sp.csv found)"
+fi
+
+echo ""
 echo ">>> sweep done. checkpoints + videos in unitree_rl_lab/logs/rsl_rl/*/"
 echo ">>> figures in src/results/figures/"

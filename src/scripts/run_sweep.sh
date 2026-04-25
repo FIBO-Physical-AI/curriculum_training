@@ -15,7 +15,7 @@ SEEDS=(${SEEDS:-0})
 MAX_ITERATIONS=${MAX_ITERATIONS:-6000}
 NUM_ENVS=${NUM_ENVS:-2048}
 VIDEO_ENVS=${VIDEO_ENVS:-1}
-VIDEO_LENGTH=${VIDEO_LENGTH:-400}
+VIDEO_LENGTH=${VIDEO_LENGTH:-200}
 NUM_BINS=${NUM_BINS:-8}
 V_MAX=${V_MAX:-4.0}
 RECORD_VIDEOS=${RECORD_VIDEOS:-1}
@@ -113,6 +113,8 @@ for condition in "${CONDITIONS[@]}"; do
 
         bin_width=$(python -c "print($V_MAX / $NUM_BINS)")
         video_dir="$latest/videos/play"
+        push_dir="$PROJECT_ROOT/src/results/videos/${condition}_seed${seed}"
+        mkdir -p "$push_dir"
 
         for B in $(seq 0 $((NUM_BINS-1))); do
             v_center=$(python -c "print(round(($B + 0.5) * $bin_width, 3))")
@@ -135,7 +137,9 @@ for condition in "${CONDITIONS[@]}"; do
                 if [ -n "$latest_mp4" ]; then
                     target="$video_dir/bin${B}_v${v_center}.mp4"
                     mv -f "$latest_mp4" "$target"
+                    cp -f "$target" "$push_dir/bin${B}_v${v_center}.mp4"
                     echo "  -> saved $target"
+                    echo "  -> copied to $push_dir/bin${B}_v${v_center}.mp4"
                 fi
             fi
         done

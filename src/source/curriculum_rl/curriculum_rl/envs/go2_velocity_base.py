@@ -12,7 +12,7 @@ from curriculum_rl.envs import mdp as curriculum_mdp
 from curriculum_rl.envs.commands import BinnedVelocityCommandCfg
 
 
-V_MAX = 3.0
+V_MAX = 4.0
 NUM_BINS = 8
 BIN_WIDTH = V_MAX / NUM_BINS
 
@@ -48,6 +48,14 @@ def _flatten_terrain(cfg) -> None:
         cfg.curriculum.terrain_levels = None
 
 
+def _apply_sprint_retune(cfg) -> None:
+    cfg.rewards.track_lin_vel_xy.params["std"] = 1.0
+    cfg.rewards.action_rate.weight = -0.03
+    cfg.rewards.joint_acc.weight = -1e-7
+    cfg.rewards.feet_air_time.params["threshold"] = 0.2
+    cfg.actions.JointPositionAction.scale = 0.35
+
+
 @configclass
 class Go2VelocityBaseEnvCfg(RobotEnvCfg):
     curriculum_kind: str = "uniform"
@@ -55,6 +63,7 @@ class Go2VelocityBaseEnvCfg(RobotEnvCfg):
     def __post_init__(self):
         super().__post_init__()
         _flatten_terrain(self)
+        _apply_sprint_retune(self)
         self.commands.base_velocity = _make_binned_cmd(self.curriculum_kind)
         self.curriculum.lin_vel_cmd_levels = None
         self.curriculum.velocity_curriculum = CurrTerm(
@@ -70,6 +79,7 @@ class Go2VelocityBasePlayEnvCfg(RobotPlayEnvCfg):
     def __post_init__(self):
         super().__post_init__()
         _flatten_terrain(self)
+        _apply_sprint_retune(self)
         self.commands.base_velocity = _make_binned_cmd(self.curriculum_kind)
         self.commands.base_velocity.rel_standing_envs = 0.0
         if hasattr(self.curriculum, "lin_vel_cmd_levels"):

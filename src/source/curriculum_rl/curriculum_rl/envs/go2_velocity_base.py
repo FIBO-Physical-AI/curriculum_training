@@ -55,7 +55,17 @@ def _apply_sprint_retune(cfg) -> None:
     cfg.rewards.joint_torques.weight = -2e-5
     cfg.rewards.joint_vel.weight = -1e-4
     cfg.rewards.feet_air_time.params["threshold"] = 0.1
+    cfg.rewards.joint_pos.params["stand_still_scale"] = 1.0
     cfg.actions.JointPositionAction.scale = 0.35
+
+
+def _apply_play_camera(cfg) -> None:
+    if hasattr(cfg, "viewer"):
+        cfg.viewer.eye = (1.6, 1.4, 0.7)
+        cfg.viewer.lookat = (0.0, 0.0, 0.3)
+        cfg.viewer.origin_type = "asset_root"
+        cfg.viewer.asset_name = "robot"
+        cfg.viewer.resolution = (1280, 720)
 
 
 def _lock_play_pose(cfg) -> None:
@@ -92,6 +102,7 @@ class Go2VelocityBasePlayEnvCfg(RobotPlayEnvCfg):
         _flatten_terrain(self)
         _apply_sprint_retune(self)
         _lock_play_pose(self)
+        _apply_play_camera(self)
         self.commands.base_velocity = _make_binned_cmd(self.curriculum_kind)
         self.commands.base_velocity.rel_standing_envs = 0.0
         if hasattr(self.curriculum, "lin_vel_cmd_levels"):

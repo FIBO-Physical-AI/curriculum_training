@@ -48,7 +48,7 @@ def plot_v_actual_vs_cmd(
 
     lo = -0.2
     hi = v_max + 0.3
-    ax.plot([lo, hi], [lo, hi], color="#9ca3af", lw=1.0, ls="--", label="perfect tracking (v_act = v_cmd)")
+    ax.plot([lo, hi], [lo, hi], color="#9ca3af", lw=1.0, ls="--", label="y = x")
     ax.axhline(0.0, color="#d1d5db", lw=0.6, ls=":")
 
     conditions = [c for c in CONDITION_ORDER if c in by_cond]
@@ -70,8 +70,7 @@ def plot_v_actual_vs_cmd(
     ax.set_ylim(lo, hi)
     ax.set_xlabel("commanded velocity v_cmd (m/s)")
     ax.set_ylabel("achieved forward velocity v_act (m/s)")
-    ax.set_title("Velocity tracking: did the policy actually move at the commanded speed?",
-                 fontsize=12, fontweight="bold")
+    ax.set_title("Achieved vs commanded forward velocity", fontsize=12, fontweight="bold")
     ax.set_xticks(v_cmds)
     ax.set_xticklabels([f"{v:.2f}" for v in v_cmds], fontsize=9)
     ax.legend(loc="upper left", frameon=False)

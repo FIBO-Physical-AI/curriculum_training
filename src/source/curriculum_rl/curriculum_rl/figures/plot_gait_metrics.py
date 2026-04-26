@@ -19,7 +19,7 @@ from curriculum_rl.figures._util import (
 
 
 METRICS = [
-    ("duty_factor", "Duty factor  (1.0 = standing, ~0.45 = trot)", (0.3, 1.05)),
+    ("duty_factor", "Duty factor", (0.3, 1.05)),
     ("stride_freq_hz", "Stride frequency (Hz)", None),
     ("stride_length_m", "Stride length (m)", None),
 ]
@@ -85,11 +85,6 @@ def plot_gait_metrics(
                 color=CONDITION_COLOR[cond], lw=2.0, marker="o", ms=6,
                 capsize=3, elinewidth=1.0, label=CONDITION_LABEL[cond],
             )
-        if metric_key == "duty_factor":
-            ax.axhline(1.0, color="#ef4444", lw=0.8, ls=":", alpha=0.6)
-            ax.text(v_cmds[-1], 1.0, "  standing", color="#ef4444", fontsize=8, va="center")
-            ax.axhline(0.5, color="#10b981", lw=0.8, ls=":", alpha=0.6)
-            ax.text(v_cmds[-1], 0.5, "  trot", color="#10b981", fontsize=8, va="center")
         ax.set_xlabel("commanded velocity v_cmd (m/s)")
         ax.set_ylabel(ylabel)
         ax.set_xticks(v_cmds)
@@ -99,8 +94,7 @@ def plot_gait_metrics(
         ax.grid(True, alpha=0.25, lw=0.6)
     axes[0].legend(loc="lower left", frameon=False, fontsize=9)
 
-    fig.suptitle("Gait metrics per bin  —  evidence that bin 0 failure is a gait/control issue, not RL",
-                 fontsize=12, fontweight="bold")
+    fig.suptitle("Gait metrics per bin", fontsize=12, fontweight="bold")
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close(fig)

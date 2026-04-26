@@ -68,11 +68,10 @@ def plot_epte_violin(
     ax.set_xticks(x)
     ax.set_xticklabels([f"{i*0.5:.1f}-{(i+1)*0.5:.1f}" for i in range(num_bins)], fontsize=9)
     ax.set_xlabel("velocity bin (m/s)", fontsize=11)
-    ax.set_ylabel("EPTE-SP  (lower is better)", fontsize=11)
+    ax.set_ylabel("EPTE-SP", fontsize=11)
     ax.set_ylim(-0.05, 1.12)
     ax.set_yticks([0, 0.2, 0.4, 0.6, 0.8, 1.0])
-    ax.set_title("Per-rollout EPTE-SP distribution (violins = full spread, dots = mean)",
-                 fontsize=12, fontweight="bold")
+    ax.set_title("Per-rollout EPTE-SP distribution", fontsize=12, fontweight="bold")
     ax.legend(frameon=False, fontsize=10, loc="upper left")
     ax.grid(True, axis="y", alpha=0.25, lw=0.6)
     ax.set_axisbelow(True)

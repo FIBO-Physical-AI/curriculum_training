@@ -17,11 +17,28 @@ from curriculum_rl.figures._util import (
 )
 
 
+def _rolling_mean(y: np.ndarray, window: int) -> np.ndarray:
+    y = np.asarray(y, dtype=float)
+    n = y.size
+    if n == 0 or window <= 1:
+        return y.copy()
+    w = min(window, n)
+    half = w // 2
+    out = np.empty(n, dtype=float)
+    for i in range(n):
+        lo = max(0, i - half)
+        hi = min(n, i + half + 1)
+        seg = y[lo:hi]
+        out[i] = float(np.nanmean(seg)) if seg.size else np.nan
+    return out
+
+
 def plot_learning_curves(
     logs_root: Path,
     out_path: Path,
     num_bins: int = 8,
     num_steps_per_env: int = 24,
+    smooth_window: int = 20,
 ) -> None:
     runs = find_runs(logs_root)
     if not runs:
@@ -42,7 +59,10 @@ def plot_learning_curves(
                 continue
             steps, _w, rewards = by_cond[cond]
             it = steps / num_steps_per_env
-            ax.plot(it, rewards[:, b], label=CONDITION_LABEL[cond], color=CONDITION_COLOR[cond], lw=2.2, alpha=0.95)
+            raw = rewards[:, b]
+            smoothed = _rolling_mean(raw, smooth_window)
+            ax.plot(it, raw, color=CONDITION_COLOR[cond], lw=0.8, alpha=0.22)
+            ax.plot(it, smoothed, label=CONDITION_LABEL[cond], color=CONDITION_COLOR[cond], lw=2.2, alpha=0.98)
         ax.set_title(f"{b * 0.5:.1f} - {(b + 1) * 0.5:.1f} m/s", fontsize=11, color="#111827", pad=6)
         ax.set_ylim(-0.03, 1.05)
         ax.set_yticks([0, 0.25, 0.5, 0.75, 1.0])
@@ -75,8 +95,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--logs-root", type=Path, default=Path("unitree_rl_lab/logs/rsl_rl"))
     parser.add_argument("--out", type=Path, default=Path("src/results/figures/learning_curves.png"))
     parser.add_argument("--num-bins", type=int, default=8)
+    parser.add_argument("--smooth-window", type=int, default=20)
     args = parser.parse_args(argv)
-    plot_learning_curves(args.logs_root, args.out, num_bins=args.num_bins)
+    plot_learning_curves(args.logs_root, args.out, num_bins=args.num_bins, smooth_window=args.smooth_window)
     print(f"wrote {args.out}")
     return 0
 

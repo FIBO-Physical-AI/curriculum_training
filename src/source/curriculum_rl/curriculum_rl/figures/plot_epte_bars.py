@@ -101,8 +101,11 @@ def plot_epte_bars(
     ax.set_ylabel("EPTE-SP", fontsize=11)
     ax.set_ylim(-0.02, 1.12)
     ax.set_yticks([0, 0.2, 0.4, 0.6, 0.8, 1.0])
-    ax.set_title("EPTE-SP per velocity bin", fontsize=12, fontweight="bold")
-    ax.legend(frameon=False, fontsize=10, loc="upper left")
+    ax.set_title("EPTE-SP per velocity bin", fontsize=12, fontweight="bold", pad=28)
+    ax.legend(
+        frameon=False, fontsize=10, ncol=len(conditions),
+        loc="lower center", bbox_to_anchor=(0.5, 1.005),
+    )
     ax.grid(True, axis="y", alpha=0.25, lw=0.6)
     ax.set_axisbelow(True)
     out_path.parent.mkdir(parents=True, exist_ok=True)

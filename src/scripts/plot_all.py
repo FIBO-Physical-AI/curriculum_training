@@ -10,6 +10,7 @@ from curriculum_rl.figures.plot_iterations_to_mastery import plot_iterations_to_
 from curriculum_rl.figures.plot_learning_curves import plot_learning_curves
 from curriculum_rl.figures.plot_sampling_heatmap import plot_sampling_heatmap
 from curriculum_rl.figures.plot_sampling_heatmap_3d import plot_sampling_heatmap_3d
+from curriculum_rl.figures.plot_gait_diagram import plot_gait_diagram
 from curriculum_rl.figures.plot_gait_metrics import plot_gait_metrics
 from curriculum_rl.figures.plot_v_actual_vs_cmd import plot_v_actual_vs_cmd
 from curriculum_rl.figures.plot_v_trace_per_bin import plot_v_trace_per_bin
@@ -40,6 +41,7 @@ def main(argv: list[str] | None = None) -> int:
         ("v_actual_vs_cmd.png", lambda p: plot_v_actual_vs_cmd(args.epte_csv, p, num_bins=args.num_bins, v_max=args.v_max)),
         ("v_trace_per_bin.png", lambda p: plot_v_trace_per_bin(args.traces_dir, p, num_bins=args.num_bins)),
         ("gait_metrics.png", lambda p: plot_gait_metrics(args.epte_csv, p, num_bins=args.num_bins, v_max=args.v_max)),
+        ("gait_diagram.png", lambda p: plot_gait_diagram(args.traces_dir, p, num_bins=args.num_bins)),
     ]
 
     ok = 0

@@ -6,6 +6,7 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.lines import Line2D
 
 from curriculum_rl.figures._util import (
     CONDITION_COLOR,
@@ -43,6 +44,7 @@ def plot_v_trace_per_bin(
     n_rows = num_bins
 
     apply_style()
+    plt.rcParams["figure.constrained_layout.use"] = False
     fig, axes = plt.subplots(
         n_rows, n_cols,
         figsize=(3.4 * n_cols, 1.6 * n_rows),
@@ -98,8 +100,18 @@ def plot_v_trace_per_bin(
             if b == n_rows - 1:
                 ax.set_xlabel("step", fontsize=9)
 
-    fig.suptitle("Per-rollout forward velocity v_x(t)  —  dashed = v_cmd, thick = mean",
-                 fontsize=12, fontweight="bold", y=1.0)
+    fig.suptitle("Per-rollout forward velocity v_x(t)",
+                 fontsize=13, fontweight="bold", y=0.995)
+    legend_handles = [
+        Line2D([0], [0], color="#111827", lw=1.0, ls="--", label="v_cmd"),
+        Line2D([0], [0], color="#6b7280", lw=1.6, label="mean v_x"),
+        Line2D([0], [0], color="#6b7280", lw=0.8, alpha=0.55, label="rollouts"),
+    ]
+    fig.legend(handles=legend_handles, loc="lower center",
+               ncol=3, frameon=False, fontsize=10,
+               bbox_to_anchor=(0.5, 0.005))
+    fig.subplots_adjust(top=0.92, bottom=0.06, left=0.07, right=0.99,
+                        hspace=0.35, wspace=0.10)
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_path, dpi=140, bbox_inches="tight")
     plt.close(fig)

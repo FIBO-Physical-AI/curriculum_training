@@ -60,8 +60,8 @@ def _apply_sprint_retune(cfg) -> None:
 
 def _apply_play_camera(cfg) -> None:
     if hasattr(cfg, "viewer"):
-        cfg.viewer.eye = (1.6, 1.4, 0.4)
-        cfg.viewer.lookat = (0.0, 0.0, 0.1)
+        cfg.viewer.eye = (1.6, 1.4, 0.25)
+        cfg.viewer.lookat = (0.0, 0.0, 0.15)
         cfg.viewer.origin_type = "asset_root"
         cfg.viewer.asset_name = "robot"
         cfg.viewer.resolution = (1280, 720)

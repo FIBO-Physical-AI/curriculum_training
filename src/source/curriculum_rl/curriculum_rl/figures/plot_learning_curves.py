@@ -51,7 +51,7 @@ def plot_learning_curves(
     for b in range(num_bins, len(axes)):
         axes[b].axis("off")
 
-    fig.subplots_adjust(left=0.06, right=0.98, top=0.90, bottom=0.18, wspace=0.15, hspace=0.32)
+    fig.subplots_adjust(left=0.06, right=0.98, top=0.84, bottom=0.18, wspace=0.15, hspace=0.40)
     handles, labels = axes[0].get_legend_handles_labels()
     fig.legend(
         handles, labels,
@@ -63,7 +63,7 @@ def plot_learning_curves(
     )
     fig.text(0.5, 0.09, "PPO iteration", ha="center", va="center", fontsize=12)
     fig.text(0.01, 0.54, "per-bin mean return", ha="left", va="center", rotation="vertical", fontsize=12)
-    fig.suptitle("Per-bin learning curves", fontsize=14, fontweight="bold", y=0.97)
+    fig.suptitle("Per-bin learning curves", fontsize=14, fontweight="bold", y=0.96)
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_path)

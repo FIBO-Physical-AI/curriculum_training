@@ -12,6 +12,7 @@ from curriculum_rl.figures.plot_sampling_heatmap import plot_sampling_heatmap
 from curriculum_rl.figures.plot_sampling_heatmap_3d import plot_sampling_heatmap_3d
 from curriculum_rl.figures.plot_gait_diagram import plot_gait_diagram
 from curriculum_rl.figures.plot_action_rate import plot_action_rate
+from curriculum_rl.figures.plot_joint_kinematics import plot_joint_kinematics
 from curriculum_rl.figures.plot_gait_metrics import plot_gait_metrics
 from curriculum_rl.figures.plot_convergence import plot_convergence
 from curriculum_rl.figures.plot_survival import plot_survival
@@ -45,6 +46,7 @@ def main(argv: list[str] | None = None) -> int:
         ("v_trace_per_bin.png", lambda p: plot_v_trace_per_bin(args.traces_dir, p, num_bins=args.num_bins)),
         ("gait_metrics.png", lambda p: plot_gait_metrics(args.epte_csv, p, num_bins=args.num_bins, v_max=args.v_max)),
         ("action_rate.png", lambda p: plot_action_rate(args.epte_csv, p, num_bins=args.num_bins, v_max=args.v_max)),
+        ("joint_kinematics.png", lambda p: plot_joint_kinematics(args.traces_dir, p, bin_idx=args.num_bins // 2, num_bins=args.num_bins)),
         ("gait_diagram.png", lambda p: plot_gait_diagram(args.traces_dir, p, num_bins=args.num_bins)),
         ("survival.png", lambda p: plot_survival(args.epte_csv, p, num_bins=args.num_bins)),
         ("convergence.png", lambda p: plot_convergence(args.logs_root, p, num_bins=args.num_bins)),

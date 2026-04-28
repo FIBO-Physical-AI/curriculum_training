@@ -27,6 +27,7 @@ def build_argparser() -> argparse.ArgumentParser:
     parser.add_argument("--v-max", type=float, default=4.0)
     parser.add_argument("--rollouts-per-bin", type=int, default=100)
     parser.add_argument("--episode-steps", type=int, default=1000)
+    parser.add_argument("--joint-trace-rollouts", type=int, default=20)
     parser.add_argument("--out-csv", type=Path, default=REPO_ROOT / "src/results/epte_sp.csv")
     parser.add_argument("--traces-dir", type=Path, default=REPO_ROOT / "src/results/eval_traces")
     return parser
@@ -113,6 +114,12 @@ def run(args: argparse.Namespace) -> int:
     traces_per_bin: dict[int, np.ndarray] = {}
     vcmd_per_bin: dict[int, float] = {}
     contact_traces_per_bin: dict[int, np.ndarray] = {}
+    joint_vel_traces_per_bin: dict[int, np.ndarray] = {}
+
+    robot_data = env.unwrapped.scene["robot"].data
+    joint_names = list(robot_data.joint_names)
+    n_joints = len(joint_names)
+    n_jt = max(1, min(args.joint_trace_rollouts, args.rollouts_per_bin))
 
     for b in range(args.num_bins):
         v = (b + 0.5) * bin_width
@@ -131,6 +138,7 @@ def run(args: argparse.Namespace) -> int:
         prev_actions: torch.Tensor | None = None
         vx_trace = np.zeros((N, K), dtype=np.float32)
         contact_trace = np.zeros((N, K, n_feet), dtype=np.bool_)
+        joint_vel_trace = np.zeros((n_jt, K, n_joints), dtype=np.float32)
         contact_steps = torch.zeros(N, n_feet, device=device)
         touchdown_count = torch.zeros(N, n_feet, device=device)
         prev_in_contact: torch.Tensor | None = None
@@ -163,6 +171,8 @@ def run(args: argparse.Namespace) -> int:
             forces = contact_sensor.data.net_forces_w[:, foot_indices_t, :].norm(dim=-1)
             in_contact = forces > 1.0
             contact_trace[:, step, :] = in_contact.detach().cpu().numpy()
+            jv = robot_data.joint_vel[:n_jt].detach().cpu().numpy()
+            joint_vel_trace[:, step, :] = jv
             contact_steps[alive] += in_contact[alive].float()
             if prev_in_contact is not None:
                 touchdown = in_contact & ~prev_in_contact
@@ -250,6 +260,7 @@ def run(args: argparse.Namespace) -> int:
         traces_per_bin[b] = vx_trace
         vcmd_per_bin[b] = float(v)
         contact_traces_per_bin[b] = contact_trace
+        joint_vel_traces_per_bin[b] = joint_vel_trace
 
         early_term = int((k_f < K - 1).sum())
         print(
@@ -268,8 +279,10 @@ def run(args: argparse.Namespace) -> int:
         save_dict[f"vx_b{b}"] = traces_per_bin[b]
         save_dict[f"vcmd_b{b}"] = np.array(vcmd_per_bin[b], dtype=np.float32)
         save_dict[f"contact_b{b}"] = contact_traces_per_bin[b]
+        save_dict[f"joint_vel_b{b}"] = joint_vel_traces_per_bin[b]
     save_dict["sim_dt"] = np.array(sim_dt, dtype=np.float32)
     save_dict["foot_names"] = np.array(foot_names)
+    save_dict["joint_names"] = np.array(joint_names)
     np.savez_compressed(trace_path, **save_dict)
     print(f"[eval_epte] saved traces -> {trace_path}")
 

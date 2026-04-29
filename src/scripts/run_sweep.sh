@@ -12,8 +12,8 @@ echo "=== sweep script starting at $(date) — output captured to $SWEEP_LOG ===
 
 CONDITIONS=(${CONDITIONS:-uniform task_specific teacher})
 SEEDS=(${SEEDS:-0})
-MAX_ITERATIONS=${MAX_ITERATIONS:-6000}
-NUM_ENVS=${NUM_ENVS:-2048}
+MAX_ITERATIONS=${MAX_ITERATIONS:-3000}
+NUM_ENVS=${NUM_ENVS:-4096}
 VIDEO_ENVS=${VIDEO_ENVS:-1}
 VIDEO_LENGTH=${VIDEO_LENGTH:-200}
 NUM_BINS=${NUM_BINS:-8}

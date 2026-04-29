@@ -201,6 +201,44 @@ def feet_gait(
     return reward
 
 
+def feet_gait_speed(
+    env: ManagerBasedRLEnv,
+    sensor_cfg: SceneEntityCfg,
+    command_name: str = "base_velocity",
+    offset: tuple[float, float, float, float] = (0.0, 0.5, 0.5, 0.0),
+    freq_at_zero: float = 1.5,
+    freq_slope: float = 0.5,
+    duty_at_zero: float = 0.65,
+    duty_slope: float = 0.0625,
+    duty_min: float = 0.40,
+    duty_max: float = 0.65,
+    cmd_norm_min: float = 0.1,
+) -> torch.Tensor:
+    contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
+    is_contact = contact_sensor.data.current_contact_time[:, sensor_cfg.body_ids] > 0
+
+    cmd = env.command_manager.get_command(command_name)
+    cmd_norm = torch.norm(cmd, dim=1)
+
+    freq = freq_at_zero + freq_slope * cmd_norm
+    period = 1.0 / freq
+    duty = torch.clamp(duty_at_zero - duty_slope * cmd_norm, duty_min, duty_max)
+
+    t = env.episode_length_buf * env.step_dt
+    global_phase = ((t % period) / period).unsqueeze(1)
+
+    offset_t = torch.tensor(list(offset), dtype=torch.float, device=env.device).unsqueeze(0)
+    leg_phase = (global_phase + offset_t) % 1.0
+
+    duty_b = duty.unsqueeze(1)
+    is_stance_expected = leg_phase < duty_b
+
+    matches = ~(is_stance_expected ^ is_contact)
+    reward = matches.float().sum(dim=-1)
+    reward = reward * (cmd_norm > cmd_norm_min).float()
+    return reward
+
+
 """
 Other rewards.
 """

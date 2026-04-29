@@ -54,7 +54,6 @@ def _apply_sprint_retune(cfg) -> None:
     cfg.rewards.joint_acc.weight = -1e-7
     cfg.rewards.joint_torques.weight = -2e-5
     cfg.rewards.joint_vel.weight = -1e-4
-    cfg.rewards.feet_air_time.params["threshold"] = 0.1
     cfg.actions.JointPositionAction.scale = 0.35
 
 

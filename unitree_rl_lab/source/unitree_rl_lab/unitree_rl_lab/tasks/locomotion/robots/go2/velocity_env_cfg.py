@@ -271,10 +271,7 @@ class RewardsCfg:
 
     # -- task
     track_lin_vel_xy = RewTerm(
-        func=mdp.track_lin_vel_xy_exp, weight=1.5, params={"command_name": "base_velocity", "std": math.sqrt(0.25)}
-    )
-    track_ang_vel_z = RewTerm(
-        func=mdp.track_ang_vel_z_exp, weight=0.75, params={"command_name": "base_velocity", "std": math.sqrt(0.25)}
+        func=mdp.track_lin_vel_xy_exp, weight=2.25, params={"command_name": "base_velocity", "std": math.sqrt(0.25)}
     )
 
     # -- base
@@ -301,13 +298,20 @@ class RewardsCfg:
     )
 
     # -- feet
-    feet_air_time = RewTerm(
-        func=mdp.feet_air_time,
-        weight=0.1,
+    feet_gait = RewTerm(
+        func=mdp.feet_gait_speed,
+        weight=1.0,
         params={
             "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot"),
             "command_name": "base_velocity",
-            "threshold": 0.5,
+            "offset": (0.0, 0.5, 0.5, 0.0),
+            "freq_at_zero": 1.5,
+            "freq_slope": 0.5,
+            "duty_at_zero": 0.65,
+            "duty_slope": 0.0625,
+            "duty_min": 0.40,
+            "duty_max": 0.65,
+            "cmd_norm_min": 0.1,
         },
     )
     air_time_variance = RewTerm(

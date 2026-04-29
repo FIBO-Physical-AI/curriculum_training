@@ -1,3 +1,5 @@
 
 *.path
 src/results/sweep_output.log
+/example
+/transcript

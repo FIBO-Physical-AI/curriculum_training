@@ -85,6 +85,7 @@ class Go2VelocityBaseEnvCfg(RobotEnvCfg):
         _flatten_terrain(self)
         _apply_sprint_retune(self)
         self.sim.physx.gpu_max_rigid_patch_count = 20 * 2**15
+        self.scene.robot.spawn.articulation_props.enabled_self_collisions = False
         self.commands.base_velocity = _make_binned_cmd(self.curriculum_kind)
         self.curriculum.lin_vel_cmd_levels = None
         self.curriculum.velocity_curriculum = CurrTerm(
@@ -104,6 +105,7 @@ class Go2VelocityBasePlayEnvCfg(RobotPlayEnvCfg):
         _lock_play_pose(self)
         _apply_play_camera(self)
         self.sim.physx.gpu_max_rigid_patch_count = 20 * 2**15
+        self.scene.robot.spawn.articulation_props.enabled_self_collisions = False
         self.commands.base_velocity = _make_binned_cmd(self.curriculum_kind)
         self.commands.base_velocity.rel_standing_envs = 0.0
         if hasattr(self.curriculum, "lin_vel_cmd_levels"):

@@ -304,13 +304,6 @@ class RewardsCfg:
         params={
             "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot"),
             "command_name": "base_velocity",
-            "offset": (0.0, 0.5, 0.5, 0.0),
-            "freq_at_zero": 1.5,
-            "freq_slope": 0.5,
-            "duty_at_zero": 0.65,
-            "duty_slope": 0.0625,
-            "duty_min": 0.40,
-            "duty_max": 0.65,
             "cmd_norm_min": 0.1,
         },
     )

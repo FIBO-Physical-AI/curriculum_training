@@ -307,6 +307,16 @@ class RewardsCfg:
             "cmd_norm_min": 0.1,
         },
     )
+    feet_swing_height = RewTerm(
+        func=mdp.feet_swing_height,
+        weight=-30.0,
+        params={
+            "asset_cfg": SceneEntityCfg("robot", body_names=".*_foot"),
+            "command_name": "base_velocity",
+            "target_height": 0.08,
+            "cmd_norm_min": 0.1,
+        },
+    )
     air_time_variance = RewTerm(
         func=mdp.air_time_variance_penalty,
         weight=-1.0,

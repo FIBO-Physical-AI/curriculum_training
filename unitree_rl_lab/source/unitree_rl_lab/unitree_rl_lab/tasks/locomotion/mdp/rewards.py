@@ -273,6 +273,70 @@ def feet_gait_speed(
     return reward
 
 
+def feet_swing_height(
+    env: ManagerBasedRLEnv,
+    asset_cfg: SceneEntityCfg,
+    command_name: str = "base_velocity",
+    target_height: float = 0.08,
+    v_walk_max: float = 1.0,
+    v_trot_max: float = 3.0,
+    walk_offset: tuple[float, float, float, float] = (0.00, 0.50, 0.25, 0.75),
+    trot_offset: tuple[float, float, float, float] = (0.00, 0.50, 0.50, 0.00),
+    bound_offset: tuple[float, float, float, float] = (0.00, 0.00, 0.50, 0.50),
+    walk_duty: float = 0.75,
+    trot_duty: float = 0.55,
+    bound_duty: float = 0.40,
+    freq_at_zero: float = 1.5,
+    freq_slope: float = 1.0,
+    cmd_norm_min: float = 0.1,
+) -> torch.Tensor:
+    asset: RigidObject = env.scene[asset_cfg.name]
+    foot_z = asset.data.body_pos_w[:, asset_cfg.body_ids, 2]
+
+    cmd = env.command_manager.get_command(command_name)
+    cmd_norm = torch.norm(cmd, dim=1)
+
+    walk_mask = cmd_norm < v_walk_max
+    bound_mask = cmd_norm >= v_trot_max
+
+    walk_off = torch.tensor(list(walk_offset), dtype=torch.float, device=env.device)
+    trot_off = torch.tensor(list(trot_offset), dtype=torch.float, device=env.device)
+    bound_off = torch.tensor(list(bound_offset), dtype=torch.float, device=env.device)
+
+    offsets = torch.where(
+        walk_mask.unsqueeze(1),
+        walk_off.unsqueeze(0).expand(env.num_envs, 4),
+        torch.where(
+            bound_mask.unsqueeze(1),
+            bound_off.unsqueeze(0).expand(env.num_envs, 4),
+            trot_off.unsqueeze(0).expand(env.num_envs, 4),
+        ),
+    )
+
+    duty = torch.where(
+        walk_mask,
+        torch.full_like(cmd_norm, walk_duty),
+        torch.where(
+            bound_mask,
+            torch.full_like(cmd_norm, bound_duty),
+            torch.full_like(cmd_norm, trot_duty),
+        ),
+    )
+
+    freq = freq_at_zero + freq_slope * cmd_norm
+    period = 1.0 / freq
+
+    t = env.episode_length_buf * env.step_dt
+    global_phase = ((t % period) / period).unsqueeze(1)
+    leg_phase = (global_phase + offsets) % 1.0
+
+    swing_expected = leg_phase >= duty.unsqueeze(1)
+    deficit = (target_height - foot_z).clamp(min=0.0)
+    reward = (swing_expected.float() * deficit).sum(dim=-1)
+    reward = reward * (cmd_norm > cmd_norm_min).float()
+    return reward
+
+
 """
 Other rewards.
 """

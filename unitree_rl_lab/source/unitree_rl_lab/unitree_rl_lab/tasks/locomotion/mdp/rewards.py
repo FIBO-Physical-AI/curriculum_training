@@ -214,8 +214,9 @@ def feet_gait_speed(
     trot_duty: float = 0.55,
     bound_duty: float = 0.40,
     freq_at_zero: float = 1.5,
-    freq_slope: float = 0.5,
-    sharpness: float = 4.0,
+    freq_slope: float = 1.0,
+    sharpness_walk_trot: float = 4.0,
+    sharpness_bound: float = 3.0,
     cmd_norm_min: float = 0.1,
 ) -> torch.Tensor:
     contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
@@ -249,6 +250,12 @@ def feet_gait_speed(
             torch.full_like(cmd_norm, bound_duty),
             torch.full_like(cmd_norm, trot_duty),
         ),
+    )
+
+    sharpness = torch.where(
+        bound_mask,
+        torch.full_like(cmd_norm, sharpness_bound),
+        torch.full_like(cmd_norm, sharpness_walk_trot),
     )
 
     freq = freq_at_zero + freq_slope * cmd_norm

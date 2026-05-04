@@ -49,16 +49,6 @@ def _flatten_terrain(cfg) -> None:
         cfg.curriculum.terrain_levels = None
 
 
-def _apply_sprint_retune(cfg) -> None:
-    cfg.rewards.track_lin_vel_xy.params["std"] = 0.5
-    cfg.rewards.action_rate.weight = -0.005
-    cfg.rewards.joint_acc.weight = -1e-7
-    cfg.rewards.joint_torques.weight = -2e-5
-    cfg.rewards.joint_vel.weight = -1e-4
-    cfg.rewards.feet_air_time.params["threshold"] = 0.1
-    cfg.actions.JointPositionAction.scale = 0.35
-
-
 def _apply_liang_additive_energy(cfg) -> None:
     cfg.rewards.track_lin_vel_xy.weight = 1.5
     cfg.rewards.track_lin_vel_xy.params["std"] = 0.5

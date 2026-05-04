@@ -1,300 +1,318 @@
-# Gait Emergence Implementation V2: Additive Energy Reward (Liang 2024)
+# Gait Emergence Run 4: Parameter Sweep for Velocity Tracking + Gait Emergence
 
-This document specifies the **second attempt** at implementing energy-driven gait emergence on Go2. Run 1 used Liang's multiplicative composite form `(R_motion + α_en·R_en) · exp(-R_aux)` and produced a "seal-shuffle" failure mode without gait emergence. Diagnosis: cutting the upstream reward stack and replacing it with a custom multiplicative composite stripped too much structural support. Run 2 restores the upstream reward stack and adds the energy term as a single additive contribution.
+This document specifies a **parameter sweep** to find the configuration of Liang 2024's energy reward that produces both (a) velocity tracking up to 4 m/s and (b) some gait differentiation across speed bins on Go2 in Isaac Lab.
 
-Read the entire document before writing code. The verification section is non-optional.
+Run 2 used paper defaults (σ_en_x=1000, std=0.5, α_en=1.0). Result: tracking works on bins 0-4 (up to 2.25 m/s), collapses on bins 5-7 (sprint speeds). Gait stays as flat trot at all speeds.
+
+This run sweeps three parameters: `σ_en_x` (energy denominator scale), `track_lin_vel_xy.std` (tracking reward sharpness), and `energy.weight` (energy reward weight α_en). The sweep tests the trade-off between energy gradient strength and tracking pressure.
+
+Read the entire document before writing code.
 
 ## 1. Branch Setup
 
-Already on `gait-emergence` branch. No new branch needed. The existing files (`liang_composite_reward.py`, `verify_liang_composite.py`, modified `go2_velocity_base.py`) will be modified in place.
+Continue on `gait-emergence` branch. Run 2 state is the starting point. No new branch.
 
-## 2. Paper Reference
+## 2. Background
 
-**Liang B., Sun L., Zhu X., Zhang B., Xiong Z., Wang Y., Li C., Sreenath K., Tomizuka M.** "Adaptive Energy Regularization for Autonomous Gait Transition and Energy-Efficient Quadruped Locomotion." ICRA 2025. arXiv:2403.20001v2.
+### 2.1 The Trade-Off
 
-### 2.1 Energy Reward (Paper Eq. 4)
+Run 2 revealed two competing objectives:
+- **Gait emergence** wants energy reward strong enough to differentiate gaits at low speed (push policy toward walk over trot)
+- **Velocity tracking** wants tracking reward strong enough to dominate at high speed (push policy toward sprint over slow-trot)
 
-$$
-R_{\text{en}} = \exp\!\left(-\frac{\sum_i |\tau_i|\,|\dot{q}_i|}{\sigma_{\text{en},x}\,|v_x| + \sigma_{\text{en},z}\,|\omega_z|}\right)
-$$
+The paper's defaults (σ_en_x=1000, std=0.5, α_en=1.0) sit at one point in this trade-off space. The sweep tests other points to find one that hits both objectives.
 
-Paper values: `σ_en,x = 1000`, `σ_en,z = 500`, `α_en = 1.0`. Hatted symbols are commands; unhatted are actual body velocities.
+### 2.2 The Three Knobs
 
-### 2.2 Floor for Denominator
+**Knob 1: `σ_en_x`** — energy denominator scaling. Liang Eq. 4: `R_en = exp(-power / (σ_en_x · |v_x| + σ_en_z · |ω_z|))`. Smaller σ_en_x makes the energy reward gradient steeper (higher penalty for high power). Default 1000 may be too large for Go2 in Isaac Lab — energy gradient may be too weak to differentiate at high speed.
 
-Paper does not specify singularity handling. We add `eps = 0.1`:
+**Knob 2: `track_lin_vel_xy.std`** — tracking reward sharpness. Reward is `exp(-err² / std²)`. Default std=0.5 means at err=3 m/s (sprint failure), reward ≈ 10⁻¹⁶ — effectively zero gradient toward higher speed. Wider std=1.0 keeps a gradient at large errors, pushing the policy toward better tracking.
 
-$$
-\text{denom} = \max(\sigma_{\text{en},x}\,|v_x| + \sigma_{\text{en},z}\,|\omega_z|,\ \varepsilon)
-$$
+**Knob 3: `energy.weight`** — energy reward weight α_en. Liang's value 1.0 may overpay the policy for being slow at sprint commands. Reduced 0.5 lets tracking dominate at high speed.
 
-## 3. Why Additive (Departure from Run 1)
+## 3. Phase 0: σ_en_x Diagnostic Pilot
 
-Run 1 used multiplicative composition `R = (R_motion + α_en·R_en) · exp(-R_aux)`. Run 1 failed: policy converged to a low-power shuffle without gait differentiation across speeds. Diagnosis: stripping the upstream reward stack and replacing with custom composite removed structural support that the policy needed.
+Goal: measure mean R_en under random actions across σ_en_x candidates. Identify which σ values land R_en in the gradient-rich middle range (0.3, 0.7).
 
-Liang paper itself acknowledges (Section IV-A): "Compared to ANYmal-C, we found that the energy reward R_en alone is insufficient to regularize Go1's behavior, which is likely due to the lighter weight compared to its motor power. Thus, following the settings in [Margolis 2022], we further add a fixed auxiliary reward R_aux to (2)..."
+### 3.1 New File
 
-In practice: lighter quadrupeds need substantial auxiliary structure beyond just energy reward. The paper used the multiplicative form on Go1; on Go2 in Isaac Lab the multiplicative form did not transfer.
+`src/scripts/sweep_sigma_diagnostic.py`. Single Python file, no training, no PPO.
 
-**Run 2 strategy:** keep the proven additive baseline that already tracks 0–4 m/s. Add `α_en · R_en` as a new additive term. Drop only the gait-biasing terms paper explicitly removed. Single-variable change vs. proven baseline. Cleaner experiment.
+### 3.2 What It Does
 
-## 4. Files
+1. Construct the existing Uniform-curriculum env. `num_envs=512`.
+2. Reset environment.
+3. For 1000 steps, take uniformly random actions in [-1, 1]^12 and call `env.step(action)`.
+4. At each step, cache power, |v_x|, |ω_z| once, then compute R_en for all candidate σ_en_x values from the same data.
+5. Aggregate mean / std / min / max of R_en for each σ value across the rollout.
 
-### 4.1 Modify: `liang_composite_reward.py`
+σ candidates:
+```python
+SIGMA_X_VALUES = [50, 100, 250, 500, 1000, 2000, 5000]
+SIGMA_Z_RATIO = 0.5   # σ_en_z = σ_en_x × 0.5
+EPS = 0.1
+```
 
-Add a new function `energy_cot` implementing Eq. 4. Keep the existing `composite_liang_energy_reward` function in place (unused but available for reference) — do not delete.
+### 3.3 Output Table
+
+```
+σ_en_x     mean(R_en)   std(R_en)   min       max       gradient regime
+─────────────────────────────────────────────────────────────────────────
+50         X.XXX        X.XXX       X.XXX     X.XXX     <classify>
+100        X.XXX        X.XXX       X.XXX     X.XXX     <classify>
+...
+```
+
+Classify by mean(R_en):
+- mean < 0.05 → "too strong (saturated near 0)"
+- mean ∈ [0.05, 0.30) → "strong"
+- mean ∈ [0.30, 0.75) → "useful gradient ✓"
+- mean ∈ [0.75, 0.95) → "weak gradient"
+- mean ≥ 0.95 → "saturated near 1, no gradient"
+
+Also print: mean power, mean |v_x|, mean |ω_z| as sanity check.
+
+### 3.4 Stop and Wait
+
+After Phase 0, paste the table. **Wait for human review.** Human picks **3 σ_en_x values** for Phase 1 grid based on the table:
+- One in "useful gradient" regime closest to mean R_en = 0.5 → call this `SIGMA_MID`
+- One step lower (more aggressive energy pressure) → call this `SIGMA_LOW`
+- One step higher (closer to or at paper's 1000) → call this `SIGMA_HIGH`
+
+If all candidates are "too strong" or "weak", extend the σ range and re-run Phase 0.
+
+## 4. Phase 1: Parameter Grid Training Sweep
+
+After Phase 0 selects σ values, run a **9-run grid** over (σ, std, α_en):
+
+| Run # | σ_en_x | std | α_en | Purpose |
+|---|---|---|---|---|
+| 1 | SIGMA_LOW | 0.5 | 1.0 | Stronger energy, narrow tracking, paper α_en |
+| 2 | SIGMA_MID | 0.5 | 1.0 | (closest to paper baseline if SIGMA_MID = 1000) |
+| 3 | SIGMA_HIGH | 0.5 | 1.0 | Weaker energy, narrow tracking, paper α_en |
+| 4 | SIGMA_LOW | 1.0 | 1.0 | Stronger energy, wide tracking, paper α_en |
+| 5 | SIGMA_MID | 1.0 | 1.0 | Mid energy, wide tracking, paper α_en |
+| 6 | SIGMA_HIGH | 1.0 | 1.0 | Weaker energy, wide tracking, paper α_en |
+| 7 | SIGMA_LOW | 1.0 | 0.5 | Stronger energy, wide tracking, reduced α_en |
+| 8 | SIGMA_MID | 1.0 | 0.5 | Mid energy, wide tracking, reduced α_en |
+| 9 | SIGMA_HIGH | 1.0 | 0.5 | Weaker energy, wide tracking, reduced α_en |
+
+`σ_en_z = σ_en_x × 0.5` for all runs (keep paper's 2:1 ratio).
+
+### 4.1 Per-Run Configuration
+
+Each run uses identical config to Run 2 except for the three swept parameters:
 
 ```python
-def energy_cot(
-    env: "ManagerBasedRLEnv",
-    sigma_en_x: float = 1000.0,
-    sigma_en_z: float = 500.0,
-    eps: float = 0.1,
-    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
-) -> torch.Tensor:
-    asset = env.scene[asset_cfg.name]
-    v_x = asset.data.root_lin_vel_b[:, 0]
-    w_z = asset.data.root_ang_vel_b[:, 2]
-    qvel = asset.data.joint_vel[:, asset_cfg.joint_ids]
-    qfrc = asset.data.applied_torque[:, asset_cfg.joint_ids]
-    power = torch.sum(torch.abs(qvel) * torch.abs(qfrc), dim=-1)
-    denom = torch.clamp(
-        sigma_en_x * torch.abs(v_x) + sigma_en_z * torch.abs(w_z),
-        min=eps,
-    )
-    return torch.exp(-power / denom)
+cfg.rewards.track_lin_vel_xy.params["std"] = <std for this run>
+cfg.rewards.track_lin_vel_xy.weight = 1.5   # unchanged across all runs
+cfg.rewards.energy.params = {
+    "sigma_en_x": <σ_en_x for this run>,
+    "sigma_en_z": <σ_en_x × 0.5>,
+    "eps": 0.1,
+}
+cfg.rewards.energy.weight = <α_en for this run>
 ```
 
-The function returns shape `(N,)` tensor with values bounded in `(0, 1]`.
+All other parameters unchanged from Run 2:
+- Uniform curriculum
+- 3000 iterations per run
+- 4096 envs
+- Single seed (seed 0) per run
+- All other reward weights as in Run 2 final state
+- Action scale 0.35
 
-### 4.2 Modify: `go2_velocity_base.py`
+Total wall-clock: 9 × ~30 min = **~4.5 hours** (depending on machine state).
 
-Rename `_apply_liang_composite_rewards` → `_apply_liang_additive_energy`.
+### 4.2 Sweep Script
 
-The function should produce this final cfg state:
+`src/scripts/sweep_param_grid.py`. Takes the σ values selected after Phase 0 as input, runs all 9 configurations sequentially, logs to a single CSV.
 
-**Tracking (proven sprint_retune values):**
-- `track_lin_vel_xy.weight = 1.5`
-- `track_lin_vel_xy.params["std"] = 0.5`
-- `track_ang_vel_z.weight = 0.75`
+Pseudo-code:
 
-**Smoothness penalties (proven sprint_retune values — weakened from upstream to allow sprint speeds):**
-- `action_rate.weight = -0.005`
-- `joint_acc.weight = -1e-7`
-- `joint_torques.weight = -2e-5`
-- `joint_vel.weight = -1e-4`
+```python
+SIGMA_LOW, SIGMA_MID, SIGMA_HIGH = <from Phase 0 selection>
+configs = [
+    (SIGMA_LOW, 0.5, 1.0),
+    (SIGMA_MID, 0.5, 1.0),
+    (SIGMA_HIGH, 0.5, 1.0),
+    (SIGMA_LOW, 1.0, 1.0),
+    (SIGMA_MID, 1.0, 1.0),
+    (SIGMA_HIGH, 1.0, 1.0),
+    (SIGMA_LOW, 1.0, 0.5),
+    (SIGMA_MID, 1.0, 0.5),
+    (SIGMA_HIGH, 1.0, 0.5),
+]
 
-**Body stability (upstream values, kept):**
-- `base_linear_velocity.weight = -2.0`
-- `base_angular_velocity.weight = -0.05`
-- `flat_orientation_l2.weight = -2.5`
-- `dof_pos_limits.weight = -10.0`
-- `undesired_contacts.weight = -1.0`
-- `feet_slide.weight = -0.1`
-- `joint_pos.weight = -0.7`
-
-**Action interface (proven sprint_retune):**
-- `cfg.actions.JointPositionAction.scale = 0.35`
-
-**Gait-biasing — DROP (paper-mandated):**
-- `feet_air_time.weight = 0.0`
-- `air_time_variance.weight = 0.0`
-
-**Energy term — REPLACE function and update params:**
-- `cfg.rewards.energy.func = energy_cot` (new function from `liang_composite_reward.py`)
-- `cfg.rewards.energy.weight = 1.0` (paper's α_en)
-- `cfg.rewards.energy.params = {"sigma_en_x": 1000.0, "sigma_en_z": 500.0, "eps": 0.1}`
-
-**Composite term — DELETE:**
-- Remove the `cfg.rewards.composite_liang = RewTerm(...)` line entirely. The composite is no longer registered.
-
-**Logging-only motion weights — REMOVE the 1e-8 hack:**
-- The 1e-8 weight was a workaround when motion was inside the composite. Now that motion (`track_lin_vel_xy`) is a real additive term at weight 1.5, the curriculum reads from it normally. No special logging hack needed.
-
-The function should be called from `__post_init__` in both `Go2VelocityBaseEnvCfg` and `Go2VelocityBasePlayEnvCfg`, replacing the previous `_apply_liang_composite_rewards` call.
-
-### 4.3 Files NOT Touched
-
-- `unitree_rl_lab/` (any file)
-- `curriculum_rl/curricula/` (any file)
-- `curriculum_rl/eval/`, `curriculum_rl/figures/`
-- `curriculum_rl/envs/mdp.py` (curriculum step logic)
-- `curriculum_rl/envs/commands.py`
-- All observation, termination, PPO config
-
-## 5. Default Parameters Summary
-
-| Parameter | Value | Source |
-|---|---:|---|
-| `σ_en,x` | 1000 | Paper Section IV-A |
-| `σ_en,z` | 500 | Paper Section IV-A |
-| `α_en` (energy weight) | 1.0 | Paper Section IV-A |
-| `eps` | 0.1 | Our deviation (paper does not specify) |
-| `track_lin_vel_xy.weight` | 1.5 | Sprint retune (proven baseline) |
-| `track_lin_vel_xy.std` | 0.5 | Sprint retune |
-| `track_ang_vel_z.weight` | 0.75 | Sprint retune |
-| `action_rate.weight` | -0.005 | Sprint retune |
-| `joint_acc.weight` | -1e-7 | Sprint retune |
-| `joint_torques.weight` | -2e-5 | Sprint retune |
-| `joint_vel.weight` | -1e-4 | Sprint retune |
-| `feet_air_time.weight` | 0.0 | Paper drops |
-| `air_time_variance.weight` | 0.0 | Paper drops |
-| Action scale | 0.35 | Sprint retune |
-
-All other R_aux terms keep their upstream values.
-
-## 6. Verification
-
-Run 1's `verify_liang_composite.py` tested the multiplicative composite. That composite is no longer registered, so the script's V3-V12 will fail (composite_liang no longer exists). Instead, do a lightweight verification of just the new `energy_cot` function plus a static cfg check.
-
-### 6.1 Static cfg check
-
-Add a small print block to verify the cfg state right before training. Either modify `verify_liang_composite.py` or write a new minimal script. The script should:
-
-1. Construct the cfg
-2. Print all reward term names and their weights
-3. Verify that:
-   - `track_lin_vel_xy.weight == 1.5`
-   - `track_ang_vel_z.weight == 0.75`
-   - `feet_air_time.weight == 0.0`
-   - `air_time_variance.weight == 0.0`
-   - `energy.weight == 1.0`
-   - `energy.func == energy_cot`
-   - `composite_liang` does NOT exist as a cfg field
-   - `actions.JointPositionAction.scale == 0.35`
-4. Confirm all R_aux term weights match upstream values
-
-### 6.2 Runtime check
-
-Construct an env, step 100 times with random actions, and assert:
-- `energy_cot(env)` returns shape `(num_envs,)` tensor
-- Values are in `(0, 1]` (allow tiny numerical slack)
-- No NaN / Inf
-- Mean value across 100 steps is in `(0.05, 0.95)` range — i.e., not stuck at 0 or 1
-
-This catches gross implementation errors. The math is simpler than Run 1's composite, so heavy verification is not needed.
-
-## 7. Smoke Test (100 iterations)
-
-After verification passes:
-
-```bash
-python src/scripts/train.py --condition uniform --seed 0 --max_iterations 100 --headless
+for run_id, (sigma, std, alpha_en) in enumerate(configs, 1):
+    # train 3000 iter with this config
+    log_dir = train_one_run(run_id, sigma, std, alpha_en)
+    # eval and extract metrics
+    metrics = eval_per_bin(log_dir)
+    append_to_csv(SWEEP_CSV, run_id, sigma, std, alpha_en, metrics)
+    save_gait_diagram(log_dir, f"sweep_run_{run_id}.png")
 ```
 
-### 7.1 Expected TensorBoard Scalars at Iter 99
+The sweep script should be **resumable** — if a run fails, other runs continue. Failed run logged with NaN metrics.
 
-**Training health:**
-- `Train/mean_episode_length` ≥ 200 steps and growing
-- `Train/mean_reward` positive (range 5–50)
+### 4.3 Output Per Run
 
-**Episode_Reward terms (which should be present and approximately what magnitudes):**
-- `Episode_Reward/track_lin_vel_xy` — positive, growing, in range 50–500 by iter 99
-- `Episode_Reward/track_ang_vel_z` — positive
-- `Episode_Reward/energy` — positive, in range 100–800 (≈ R_en × ~1000 steps × weight 1.0)
-- `Episode_Reward/action_rate` — negative, small
-- `Episode_Reward/dof_pos_limits` — small or zero
-- `Episode_Reward/flat_orientation_l2` — negative, small
-- `Episode_Reward/feet_slide` — negative, small
-- `Episode_Reward/undesired_contacts` — small or zero
+For each run, log to a single CSV (`src/results/sweep_v4.csv`) with columns:
 
-**Episode_Reward terms that MUST be zero:**
-- `Episode_Reward/feet_air_time` — exactly 0.0 (weight is 0)
-- `Episode_Reward/air_time_variance` — exactly 0.0 (weight is 0)
-
-**Episode_Reward terms that MUST NOT exist:**
-- `Episode_Reward/composite_liang` — not in scalars list
-
-**Termination:**
-- `Episode_Termination/time_out` — non-zero (good, episodes reaching end)
-- `Episode_Termination/bad_orientation` and `base_contact` — small or zero
-
-### 7.2 Smoke Test Gates (Stop and Diagnose if Any Fail)
-
-- `mean_episode_length` < 100 by iter 99 → policy collapsing, do not proceed
-- `mean_reward` strongly negative → penalties dominating, check weights
-- `composite_liang` still in scalars list → cfg not actually updated, did not delete the term
-- NaN in any scalar → bug in `energy_cot`, check denominator floor
-
-## 8. Full Training (Only After Smoke Passes)
-
-```bash
-python src/scripts/train.py --condition uniform --seed 0 --max_iterations 3000 --headless
+```
+run_id, sigma_en_x, std, alpha_en,
+mean_reward_final, mean_ep_length_final,
+err_b0, err_b1, err_b2, err_b3, err_b4, err_b5, err_b6, err_b7,
+v_act_b0, v_act_b1, ..., v_act_b7,
+duty_b0, duty_b1, ..., duty_b7,
+freq_b0, freq_b1, ..., freq_b7,
+stride_b0, ..., stride_b7,
+flight_b0, ..., flight_b7,    # binary 0/1
+wall_clock_min
 ```
 
-Wall-clock target: ~30 min on RTX 4070 Ti SUPER (matches main-branch baseline since reward stack is now close to baseline).
+Per-bin metrics computed identically to Run 2 evaluation:
+- 100 deterministic rollouts per bin
+- Mean velocity, tracking error, duty factor, stride frequency, stride length
+- Flight phase indicator: 1 if foot contact data shows a moment of all-four-feet-airborne, else 0
 
-If wall-clock exceeds 60 min, stop — something is slow that wasn't before.
+### 4.4 Comparison Table (Auto-Generated)
 
-After seed 0 completes, paste:
-- Final `Train/mean_reward` and `Train/mean_episode_length`
-- All `Episode_Reward/*` final values
-- `Metrics/base_velocity/error_vel_xy` and `error_vel_yaw` final
-- All `Episode_Termination/*` final
-- Snapshot at iter 1500 of `Train/mean_reward` and `error_vel_xy` (mid-training health check)
-- Wall-clock time
+After all 9 runs complete, generate a markdown table from the CSV. Save as `src/results/sweep_v4_comparison.md`. Format:
 
-Do not start seed 1 until seed 0 is reviewed.
+```markdown
+# Sweep V4 — Comparison Table
 
-## 9. Acceptance Criteria
+| run | σ_en_x | std | α_en | mean_R | ep_len | b0 err | b4 err | b7 err | b0 duty | b4 duty | b7 duty | flight 5/6/7 | walltime |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | ... | ... | ... | ... | ... | ... | ... | ... | ... | ... | ... | 0/0/0 | ...m |
+| 2 | ... |
+...
 
-The implementation is acceptable if all of the following hold after Uniform 3000-iter run:
+## Per-Bin Tracking Error (matrix view)
 
-**Training health:**
-- Exit code 0
-- `Train/mean_episode_length` at iter 3000 ≥ 800 (out of 1000 max)
-- No NaN at any iteration
+| run | b0   | b1   | b2   | b3   | b4   | b5   | b6   | b7   |
+|---|---|---|---|---|---|---|---|---|
+| 1 | 0.XX | 0.XX | 0.XX | 0.XX | 0.XX | 0.XX | 0.XX | 0.XX |
+| 2 | ...
 
-**Tracking (this should match or beat the curriculum study baseline):**
-- `error_vel_xy` ≤ 0.3 m/s on bins 0–4
-- `error_vel_xy` ≤ 0.6 m/s on bins 5–7 (high-speed allowed to be worse)
+## Per-Bin Duty Factor (matrix view)
 
-**Gait emergence (the actual experimental question):**
-- Visual inspection of `gait_diagram.png`: low-speed bins show different contact pattern than high-speed bins
-- Duty factor (computed from foot contact data) decreases monotonically (or roughly so) with speed
-- High-speed bins (≥ 2.5 m/s) show shorter stance fraction than low-speed bins
-- At least one bin among 5/6/7 shows visible flight phase (all four feet airborne briefly)
+| run | b0   | b1   | b2   | b3   | b4   | b5   | b6   | b7   |
+|---|---|---|---|---|---|---|---|---|
+| 1 | 0.XX | 0.XX | 0.XX | 0.XX | 0.XX | 0.XX | 0.XX | 0.XX |
+...
+```
 
-**Hardware safety:**
-- p95 joint velocity ≤ 28 rad/s on every bin
+Each gait diagram saved as `src/results/figures/sweep_v4_run_<id>_gait.png`.
 
-If gait emergence criteria fail but tracking is healthy → write up as honest negative result. Do not retune further. The energy reward in additive form on Go2 in Isaac Lab is what it is.
+## 5. Acceptance Criteria
 
-## 10. Workflow
+A run is "winning" if all three hold:
 
-1. **Read this entire document first.**
-2. Modify `liang_composite_reward.py` — add `energy_cot` function. Keep existing composite function.
-3. Modify `go2_velocity_base.py` — rename function, update body, delete composite_liang registration.
-4. Run static cfg check (Section 6.1). Paste output. **Wait for review before continuing.**
-5. Run runtime energy check (Section 6.2). Paste output. **Wait for review before continuing.**
-6. Run smoke test (Section 7). Paste TensorBoard scalars. **Wait for review.**
-7. If smoke passes, run full 3000-iter training (Section 8). Paste metrics. **Wait for review.**
-8. **Do not commit.** All commits require explicit confirmation per CLAUDE.md.
+**A. High-speed tracking:**
+- `track_err` on bin 7 ≤ 0.5 m/s (vs Run 2's 0.85)
+- `track_err` on bin 6 ≤ 0.5 m/s
 
-## 11. Things That Will NOT Be Touched
+**B. Low-speed tracking maintained:**
+- `track_err` on bins 0-4 ≤ 0.4 m/s for all 5 bins
 
-- Three curriculum strategies (uniform / task_specific / teacher) — code unchanged, only Uniform exercised
-- `mdp.py` curriculum step logic
-- Observation / critic specifications
-- Termination conditions
+**C. Some gait differentiation visible:**
+- `duty(b0) - duty(b4) ≥ 0.05` (walk-trot differentiation), OR
+- Flight phase visible at bin 6 or 7
+
+If multiple runs win → pick the one with smallest mean tracking error across all bins.
+
+If no run wins on all three → report which run wins on (A) and (B) (tracking-focused result), and acknowledge gait emergence remains absent. This is still a defensible result: "parameter sweep extended Liang's velocity tracking range from 2.25 m/s to X m/s on Go2 in Isaac Lab via parameter recalibration; gait emergence beyond efficient trot did not transfer."
+
+## 6. Files
+
+### 6.1 New Files
+
+- `src/scripts/sweep_sigma_diagnostic.py` (Phase 0)
+- `src/scripts/sweep_param_grid.py` (Phase 1 sweep driver)
+- `src/results/sweep_v4.csv` (output, auto-created)
+- `src/results/sweep_v4_comparison.md` (output, auto-created)
+- `src/results/figures/sweep_v4_run_<id>_gait.png` × 9 (output, auto-created)
+
+### 6.2 Modified Files
+
+`src/source/curriculum_rl/curriculum_rl/envs/go2_velocity_base.py` — add a way to override σ_en_x, σ_en_z, std, energy.weight from environment variables or argparse, so the sweep script can set them per-run without editing code. Implementer's choice on mechanism (env vars or kwargs).
+
+### 6.3 Files NOT Touched
+
+- `liang_composite_reward.py` (energy_cot function unchanged)
+- All curriculum code
+- `mdp.py`, observations, terminations, PPO config, action interface, sim parameters
+
+## 7. Workflow
+
+```
+1. Write src/scripts/sweep_sigma_diagnostic.py (Phase 0 script)
+2. Write src/scripts/sweep_param_grid.py (Phase 1 driver, prepared but not run yet)
+3. Run Phase 0 → paste table → WAIT for review
+4. Human selects (SIGMA_LOW, SIGMA_MID, SIGMA_HIGH) → tells you the values
+5. Pass selected σ values to sweep_param_grid.py
+6. Run Phase 1 sweep (9 runs, ~4.5 hours total)
+7. After all 9 complete, generate sweep_v4_comparison.md and gait diagrams
+8. Paste comparison table → WAIT for review
+9. Human picks winning run (or declares "no winner") → next steps
+```
+
+**Do not commit anything during the sweep.** Per CLAUDE.md, all commits require explicit confirmation.
+
+**Do not start Phase 1 until Phase 0 is reviewed.** The σ values matter — wrong σ wastes 4.5 hours.
+
+## 8. Resumability
+
+The sweep script must handle failures gracefully:
+
+- If any individual run crashes (PhysX, OOM, etc.), log the failure with NaN metrics, continue to next run.
+- If the sweep is interrupted (Ctrl+C, system reboot), `sweep_param_grid.py` should detect existing runs in the CSV and skip those, resuming from where it stopped.
+
+This is non-negotiable — 4.5 hours is too long to lose to a single crash.
+
+## 9. Things That Will NOT Be Touched
+
+- Curriculum strategies (Uniform only, as in Run 2)
+- Reward stack composition beyond the three sweep knobs
+- Action scale (stays 0.35)
 - PPO hyperparameters
 - Domain randomization
-- Sim parameters (dt, decimation)
+- Sim parameters (dt, decimation, num_envs)
+- Episode length, command resampling time
 
-If during implementation any of these appear to need changes, **stop and report back** rather than modifying.
+If during implementation any of these appear to need changes, **stop and report back**.
 
-## 12. Deviations From Paper (For Final Writeup)
+## 10. What Local Session Reports After All 9 Runs
 
-1. **Floor on energy denominator (`eps = 0.1`).** Paper does not specify.
-2. **Additive composition instead of multiplicative.** Paper uses `R = (R_motion + α_en·R_en) · exp(-R_aux)`; we use `R = R_motion + α_en·R_en + R_aux_additive`. Run 1 attempted faithful multiplicative form and failed. Run 2 uses additive. This is a meaningful methodological deviation that must be documented.
-3. **R_aux contents.** We use Isaac Lab Go2 upstream stack with sprint_retune (12 active terms), which is in spirit similar to but not identical to Liang's R_aux from WTW. Paper's R_aux block is borrowed from Margolis 2022.
-4. **Hardware platform.** Paper used Go1 + ANYmal-C with `α_en = 1.0`. We use Go2 with the same `α_en = 1.0`.
-5. **Simulator.** Paper used IsaacGym; we use Isaac Lab (Isaac Sim 4.5 / PhysX). Documented performance regressions in this version may affect outcomes.
+A single markdown file `src/results/sweep_v4_comparison.md` containing:
 
-## 13. If Run 2 Also Fails
+1. The full comparison table (Section 4.4)
+2. Top 3 runs by tracking quality (sorted by sum of |track_err| across bins)
+3. Top 3 runs by gait differentiation (sorted by duty(b0) - duty(b4))
+4. The "winner" — single run that satisfies all three acceptance criteria, or "no winner" with explanation
+5. The 9 gait diagrams as embedded images
 
-If after Section 9 acceptance check fails (tracking is fine but gait emergence absent), **do not retry**. Time budget exhausted. Write up as:
+Plus the raw CSV for further analysis if needed.
 
-> "We implemented Liang 2024's energy-driven gait emergence on Go2 in Isaac Lab, both in the paper's faithful multiplicative form (Run 1) and an additive variant (Run 2). Tracking succeeded. Gait emergence did not transfer cleanly. Hypotheses for non-transfer: (i) platform sensitivity (paper used Go1 12kg + ANYmal-C 50kg; Go2 sits between but closer to Go1, the regime paper itself reports as marginal), (ii) simulator differences (paper used IsaacGym; we used Isaac Lab with documented PhysX regression in v4.5), (iii) α_en tuning may need platform-specific calibration not provided in paper."
+## 11. Time Budget Honest Note
 
-That is a defensible scientific contribution. Negative results matter.
+9 runs × 30 min = 4.5 hours of training. Add ~30 min for eval/plotting per run = ~7 hours total wall-clock for the full sweep. The implementer should run it overnight or during a long break, not synchronously while watching.
+
+If wall-clock per run exceeds 45 min, stop the sweep — something has slowed down vs Run 2's baseline. Diagnose throughput before continuing.
+
+## 12. Post-Sweep Decisions
+
+Three possible outcomes:
+
+**Outcome A: One run wins all three criteria.**
+→ Train seed 1 with that config to verify reproducibility (~30 min). If reproduces, write up as positive result.
+
+**Outcome B: Best run wins on tracking but not gait.**
+→ Reframe writeup: "Parameter recalibration extends tracking range; gait emergence remains an open problem."
+
+**Outcome C: No run improves over Run 2.**
+→ The parameter space within Liang's framework is exhausted on Go2 in Isaac Lab. Write up Run 2 + sweep as comprehensive negative result. Hypothesize further: action-space or simulator-level limitations.
+
+All three outcomes are defensible. The sweep removes ambiguity.

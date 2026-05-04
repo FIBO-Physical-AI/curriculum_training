@@ -227,8 +227,11 @@ def main() -> int:
     soft_limits = asset.data.soft_joint_pos_limits
     new_pos = asset.data.joint_pos.clone()
     new_pos[0, 0] = soft_limits[0, 0, 1].item() + 0.5
+    new_vel = asset.data.joint_vel.clone()
     asset.write_joint_state_to_sim(
-        position=new_pos[:1], velocity=asset.data.joint_vel[:1], env_ids=torch.tensor([0], device=device)
+        position=new_pos[:1].clone(),
+        velocity=new_vel[:1].clone(),
+        env_ids=torch.tensor([0], device=device),
     )
     inner.sim.forward()
     comps_v10 = composite_liang_energy_reward(inner, return_components=True)

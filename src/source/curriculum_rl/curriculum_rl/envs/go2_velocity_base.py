@@ -68,6 +68,7 @@ def _apply_liang_additive_energy(cfg) -> None:
     cfg.rewards.energy.func = energy_cot
     cfg.rewards.energy.weight = energy_weight
     cfg.rewards.energy.params = {"sigma_en_x": sigma_en_x, "sigma_en_z": sigma_en_z, "eps": 0.1}
+    cfg.actions.JointPositionAction.scale = 0.35
 
 
 def _apply_play_camera(cfg) -> None:

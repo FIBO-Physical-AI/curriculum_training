@@ -1,15 +1,8 @@
-===== SWEEP 2026-05-04 11:44:02 conditions=(uniform) seeds=(0 1) I_max=1500 =====
-[START] uniform seed=0  at 2026-05-04 11:44:02
-[STOP]  uniform seed=0  at 2026-05-04 12:14:42  elapsed=1840s (0h30m40s)  rc=0
-  -> marker uniform_seed0.path = /home/drl-68/curriculum_training/unitree_rl_lab/logs/rsl_rl/curriculum_go2_velocity_uniform/2026-05-04_11-44-09
-[EVAL_START] uniform seed=0  at 2026-05-04 12:14:42
-[EVAL_STOP]  uniform seed=0  elapsed=102s
-[PLAY_START] uniform seed=0  at 2026-05-04 12:16:24
-[PLAY_STOP]  uniform seed=0  elapsed=151s
-[START] uniform seed=1  at 2026-05-04 12:18:55
-[STOP]  uniform seed=1  at 2026-05-04 12:35:20  elapsed=985s (0h16m25s)  rc=0
-  -> marker uniform_seed1.path = /home/drl-68/curriculum_training/unitree_rl_lab/logs/rsl_rl/curriculum_go2_velocity_uniform/2026-05-04_12-18-59
-[EVAL_START] uniform seed=1  at 2026-05-04 12:35:20
-[EVAL_STOP]  uniform seed=1  elapsed=95s
-[PLAY_START] uniform seed=1  at 2026-05-04 12:36:55
-[PLAY_STOP]  uniform seed=1  elapsed=150s
+===== SWEEP 2026-05-04 15:46:33 conditions=(uniform) seeds=(0) I_max=1500 =====
+[START] uniform seed=0  at 2026-05-04 15:46:33
+[STOP]  uniform seed=0  at 2026-05-04 16:02:43  elapsed=970s (0h16m10s)  rc=0
+  -> marker uniform_seed0.path = /home/drl-68/curriculum_training/unitree_rl_lab/logs/rsl_rl/curriculum_go2_velocity_uniform/2026-05-04_15-46-37
+[EVAL_START] uniform seed=0  at 2026-05-04 16:02:43
+[EVAL_STOP]  uniform seed=0  elapsed=98s
+[PLAY_START] uniform seed=0  at 2026-05-04 16:04:21
+[PLAY_STOP]  uniform seed=0  elapsed=153s

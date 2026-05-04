@@ -1,10 +1,10 @@
 cond             bin  reward_mean  reward_std   slope/iter  status
 ------------------------------------------------------------------------
-uniform            0        0.006       0.000     -0.00000  CONVERGED suboptimal
-uniform            1        0.006       0.000      0.00000  CONVERGED suboptimal
-uniform            2        0.006       0.000     -0.00000  CONVERGED suboptimal
-uniform            3        0.006       0.000     -0.00000  CONVERGED suboptimal
-uniform            4        0.006       0.000     -0.00000  CONVERGED suboptimal
-uniform            5        0.006       0.000      0.00000  CONVERGED suboptimal
-uniform            6        0.006       0.000      0.00000  CONVERGED suboptimal
-uniform            7        0.006       0.000     -0.00000  CONVERGED suboptimal
+uniform            0        0.190       0.007     -0.00002  CONVERGED suboptimal
+uniform            1        0.196       0.005     -0.00000  CONVERGED suboptimal
+uniform            2        0.194       0.007      0.00001  CONVERGED suboptimal
+uniform            3        0.193       0.005     -0.00001  CONVERGED suboptimal
+uniform            4        0.195       0.005      0.00001  CONVERGED suboptimal
+uniform            5        0.194       0.005      0.00001  CONVERGED suboptimal
+uniform            6        0.194       0.005      0.00002  CONVERGED suboptimal
+uniform            7        0.191       0.006      0.00000  CONVERGED suboptimal

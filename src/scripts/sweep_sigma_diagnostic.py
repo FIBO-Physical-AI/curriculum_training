@@ -95,17 +95,9 @@ def main() -> int:
         if (step + 1) % 100 == 0:
             print(f"  step {step + 1}/{args_cli.num_steps}", flush=True)
 
-    print("[diag] rollout complete; closing env", flush=True)
-    env.close()
+    print("[diag] rollout complete; computing table BEFORE close", flush=True)
 
-    print()
-    print(f"mean power : {np.mean(power_acc):.3f} W")
-    print(f"mean |v_x| : {np.mean(vx_acc):.4f} m/s")
-    print(f"mean |w_z| : {np.mean(wz_acc):.4f} rad/s")
-    print()
-    print(f"{'sigma_en_x':>10}  {'mean(R_en)':>10}  {'std(R_en)':>9}  {'min':>7}  {'max':>7}  gradient regime")
-    print("-" * 80)
-
+    summary_rows = []
     for s in SIGMA_X_VALUES:
         data = torch.cat(r_en_acc[s]).numpy()
         m = float(data.mean())
@@ -122,7 +114,40 @@ def main() -> int:
             regime = "weak gradient"
         else:
             regime = "saturated near 1, no gradient"
-        print(f"{s:>10}  {m:>10.3f}  {std:>9.3f}  {mn:>7.3f}  {mx:>7.3f}  {regime}")
+        summary_rows.append((s, m, std, mn, mx, regime))
+
+    mean_power = float(np.mean(power_acc))
+    mean_vx = float(np.mean(vx_acc))
+    mean_wz = float(np.mean(wz_acc))
+
+    sys.stdout.write("\n")
+    sys.stdout.write(f"mean power : {mean_power:.3f} W\n")
+    sys.stdout.write(f"mean |v_x| : {mean_vx:.4f} m/s\n")
+    sys.stdout.write(f"mean |w_z| : {mean_wz:.4f} rad/s\n\n")
+    sys.stdout.write(f"{'sigma_en_x':>10}  {'mean(R_en)':>10}  {'std(R_en)':>9}  {'min':>7}  {'max':>7}  gradient regime\n")
+    sys.stdout.write("-" * 80 + "\n")
+    for s, m, std, mn, mx, regime in summary_rows:
+        sys.stdout.write(f"{s:>10}  {m:>10.3f}  {std:>9.3f}  {mn:>7.3f}  {mx:>7.3f}  {regime}\n")
+    sys.stdout.flush()
+
+    out_path = REPO_ROOT / "src" / "results" / "phase0_table.txt"
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with out_path.open("w") as f:
+        f.write(f"mean power : {mean_power:.3f} W\n")
+        f.write(f"mean |v_x| : {mean_vx:.4f} m/s\n")
+        f.write(f"mean |w_z| : {mean_wz:.4f} rad/s\n\n")
+        f.write(f"{'sigma_en_x':>10}  {'mean(R_en)':>10}  {'std(R_en)':>9}  {'min':>7}  {'max':>7}  gradient regime\n")
+        f.write("-" * 80 + "\n")
+        for s, m, std, mn, mx, regime in summary_rows:
+            f.write(f"{s:>10}  {m:>10.3f}  {std:>9.3f}  {mn:>7.3f}  {mx:>7.3f}  {regime}\n")
+    print(f"[diag] table written to {out_path}", flush=True)
+
+    print("[diag] closing env...", flush=True)
+    try:
+        env.close()
+        print("[diag] env closed cleanly", flush=True)
+    except Exception as e:
+        print(f"[diag] env.close() raised {type(e).__name__}: {e}", flush=True)
 
     return 0
 
@@ -139,7 +164,12 @@ if __name__ == "__main__":
         rc = 1
     finally:
         try:
+            sys.stdout.flush()
+            sys.stderr.flush()
+        except Exception:
+            pass
+        try:
             simulation_app.close()
         except Exception:
             pass
-    sys.exit(rc)
+    os._exit(rc)

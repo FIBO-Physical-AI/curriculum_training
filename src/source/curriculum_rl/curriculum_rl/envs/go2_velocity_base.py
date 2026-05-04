@@ -72,13 +72,13 @@ def _apply_liang_composite_rewards(cfg) -> None:
     cfg.rewards.track_lin_vel_xy.weight = 1e-8
     cfg.rewards.track_ang_vel_z.weight = 1e-8
 
-    cfg.rewards.dof_pos_limits.weight = -10.0
-    cfg.rewards.action_rate.weight = -0.1
-    cfg.rewards.undesired_contacts.weight = -1.0
-    cfg.rewards.flat_orientation_l2.weight = -2.5
-    cfg.rewards.base_linear_velocity.weight = -2.0
-    cfg.rewards.base_angular_velocity.weight = -0.05
-    cfg.rewards.feet_slide.weight = -0.1
+    cfg.rewards.dof_pos_limits.weight = 0.0
+    cfg.rewards.action_rate.weight = 0.0
+    cfg.rewards.undesired_contacts.weight = 0.0
+    cfg.rewards.flat_orientation_l2.weight = 0.0
+    cfg.rewards.base_linear_velocity.weight = 0.0
+    cfg.rewards.base_angular_velocity.weight = 0.0
+    cfg.rewards.feet_slide.weight = 0.0
 
     cfg.actions.JointPositionAction.scale = 0.35
 

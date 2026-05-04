@@ -91,18 +91,30 @@ def main() -> int:
         w = getattr(rew, name).weight
         failures += _check(f"V2 dropped: {name}.weight == 0.0", w == 0.0, f"got {w}")
     print()
-    print("R_aux upstream weight summary (for human inspection):")
-    for name, expected in (
-        ("dof_pos_limits", -10.0),
-        ("action_rate", -0.1),
-        ("undesired_contacts", -1.0),
-        ("flat_orientation_l2", -2.5),
-        ("base_linear_velocity", -2.0),
-        ("base_angular_velocity", -0.05),
-        ("feet_slide", -0.1),
+    print("R_aux additive cfg weights (must be 0.0 - composite computes R_aux internally):")
+    for name in (
+        "dof_pos_limits",
+        "action_rate",
+        "undesired_contacts",
+        "flat_orientation_l2",
+        "base_linear_velocity",
+        "base_angular_velocity",
+        "feet_slide",
     ):
         w = getattr(rew, name).weight
-        print(f"  {name:25s} weight = {w:>10g}  (expected {expected:>10g})")
+        failures += _check(f"V2 R_aux additive: {name}.weight == 0.0", w == 0.0, f"got {w}")
+    print()
+    print("R_aux internal weights (used by composite for R_aux sum):")
+    for name, val in (
+        ("W_DOF_POS_LIMITS", W_DOF_POS_LIMITS),
+        ("W_ACTION_RATE", W_ACTION_RATE),
+        ("W_UNDESIRED_CONTACTS", W_UNDESIRED_CONTACTS),
+        ("W_FLAT_ORIENTATION", W_FLAT_ORIENTATION),
+        ("W_BASE_LIN_VEL_Z", W_BASE_LIN_VEL_Z),
+        ("W_BASE_ANG_VEL_XY", W_BASE_ANG_VEL_XY),
+        ("W_FEET_SLIDE", W_FEET_SLIDE),
+    ):
+        print(f"  {name:25s} = {val:>10g}")
 
     print()
     print("=" * 70)

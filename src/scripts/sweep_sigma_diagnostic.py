@@ -1,10 +1,9 @@
 from __future__ import annotations
 
+import argparse
+import os
 import sys
 from pathlib import Path
-
-from isaaclab.app import AppLauncher
-import argparse
 
 SIGMA_X_VALUES = [50, 100, 250, 500, 1000, 2000, 5000]
 SIGMA_Z_RATIO = 0.5
@@ -13,38 +12,53 @@ DEFAULT_NUM_ENVS = 512
 DEFAULT_NUM_STEPS = 1000
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-
-parser = argparse.ArgumentParser()
-parser.add_argument("--num_envs", type=int, default=DEFAULT_NUM_ENVS)
-parser.add_argument("--num_steps", type=int, default=DEFAULT_NUM_STEPS)
-AppLauncher.add_app_launcher_args(parser)
-args = parser.parse_args()
-args.headless = True
-
-app_launcher = AppLauncher(args)
-simulation_app = app_launcher.app
-
-import gymnasium as gym
-import numpy as np
-import torch
-
-import curriculum_rl  # noqa: F401
-
 TASK = "Curriculum-Go2-Velocity-Uniform"
 
 
-def main() -> int:
-    env_cfg_entry = gym.spec(TASK).kwargs["env_cfg_entry_point"]
-    module_path, _, cls_name = env_cfg_entry.rpartition(":")
-    cfg_module = __import__(module_path, fromlist=[cls_name])
-    cfg = getattr(cfg_module, cls_name)()
-    cfg.scene.num_envs = args.num_envs
+def build_argparser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--num_envs", type=int, default=DEFAULT_NUM_ENVS)
+    parser.add_argument("--num_steps", type=int, default=DEFAULT_NUM_STEPS)
+    return parser
 
-    env = gym.make(TASK, cfg=cfg, render_mode=None)
-    env.reset(seed=0)
+
+def run(args: argparse.Namespace) -> int:
+    from isaaclab.app import AppLauncher
+
+    app_cfg = argparse.Namespace(
+        headless=True,
+        enable_cameras=False,
+        device="cuda:0",
+        num_gpus=1,
+        experience="",
+        renderer="RaytracedLighting",
+        livestream=-1,
+        kit_args="",
+    )
+    app = AppLauncher(app_cfg).app
+
+    import gymnasium as gym
+    import numpy as np
+    import torch
+
+    import isaaclab_tasks  # noqa: F401
+    import curriculum_rl  # noqa: F401
+    from unitree_rl_lab.utils.parser_cfg import parse_env_cfg
+
+    env_cfg = parse_env_cfg(
+        TASK,
+        device=app_cfg.device,
+        num_envs=args.num_envs,
+        use_fabric=True,
+        entry_point_key="play_env_cfg_entry_point",
+    )
+    env = gym.make(TASK, cfg=env_cfg)
+
     inner = env.unwrapped
     device = inner.device
     act_dim = env.action_space.shape[-1]
+
+    env.reset(seed=0)
 
     r_en_acc: dict[int, list[torch.Tensor]] = {s: [] for s in SIGMA_X_VALUES}
     power_acc: list[float] = []
@@ -76,7 +90,7 @@ def main() -> int:
             print(f"  step {step + 1}/{args.num_steps}")
 
     env.close()
-    simulation_app.close()
+    app.close()
 
     print()
     print(f"mean power : {np.mean(power_acc):.3f} W")
@@ -105,6 +119,12 @@ def main() -> int:
         print(f"{s:>8}  {m:>10.3f}  {std:>9.3f}  {mn:>7.3f}  {mx:>7.3f}  {regime}")
 
     return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_argparser().parse_args(argv)
+    os.chdir(REPO_ROOT / "unitree_rl_lab")
+    return run(args)
 
 
 if __name__ == "__main__":

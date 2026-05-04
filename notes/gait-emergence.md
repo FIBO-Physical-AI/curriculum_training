@@ -1,456 +1,300 @@
-# Gait Emergence Implementation: Liang 2024 Multiplicative Composite Reward
+# Gait Emergence Implementation V2: Additive Energy Reward (Liang 2024)
 
-This document specifies the implementation of an energy-driven gait emergence experiment for the Go2 quadruped, following Liang, Sun, Zhu et al. ICRA 2025. Read the entire document before writing any code. The verification section is non-optional — implementation drift on the math is the primary risk and must be caught before training begins.
+This document specifies the **second attempt** at implementing energy-driven gait emergence on Go2. Run 1 used Liang's multiplicative composite form `(R_motion + α_en·R_en) · exp(-R_aux)` and produced a "seal-shuffle" failure mode without gait emergence. Diagnosis: cutting the upstream reward stack and replacing it with a custom multiplicative composite stripped too much structural support. Run 2 restores the upstream reward stack and adds the energy term as a single additive contribution.
+
+Read the entire document before writing code. The verification section is non-optional.
 
 ## 1. Branch Setup
 
-Create a new branch from `main`:
-
-```
-git checkout main
-git pull
-git checkout -b gait-emergence
-```
-
-Do not branch from any prior gait-shaping branch (Path D, etc.). The point is a clean baseline where `main` is known to track 0–4 m/s without gait shaping.
-
-This branch will not be pushed. All commits stay local until reviewed.
+Already on `gait-emergence` branch. No new branch needed. The existing files (`liang_composite_reward.py`, `verify_liang_composite.py`, modified `go2_velocity_base.py`) will be modified in place.
 
 ## 2. Paper Reference
 
-**Citation.** Liang B., Sun L., Zhu X., Zhang B., Xiong Z., Wang Y., Li C., Sreenath K., Tomizuka M. "Adaptive Energy Regularization for Autonomous Gait Transition and Energy-Efficient Quadruped Locomotion." ICRA 2025. arXiv:2403.20001v2.
+**Liang B., Sun L., Zhu X., Zhang B., Xiong Z., Wang Y., Li C., Sreenath K., Tomizuka M.** "Adaptive Energy Regularization for Autonomous Gait Transition and Energy-Efficient Quadruped Locomotion." ICRA 2025. arXiv:2403.20001v2.
 
-**Paper hardware:** Unitree Go1 + ANYmal-C. Same scaling constants used on both — the formulation transfers across platforms. Go2 is the direct successor of Go1.
-
-### 2.1 Composition Equation (Paper Eq. 2)
-
-$$
-R = (R_{\text{motion}} + \alpha_{\text{en}} \cdot R_{\text{en}}(v_x, \omega_z)) \cdot \exp(-R_{\text{aux}})
-$$
-
-This is **multiplicative shielding**. The motion + energy block is non-negative; the auxiliary block attenuates that block multiplicatively in the range (0, 1]. The total reward `R` is therefore non-negative at every timestep regardless of how badly the robot is behaving.
-
-### 2.2 Motion Reward (Paper Eq. 3)
-
-$$
-R_{\text{lin}} = \exp\!\left(-\frac{|v_x - \hat{v}_x|^2 + |v_y - \hat{v}_y|^2}{\sigma_v}\right)
-$$
-
-$$
-R_{\text{ang}} = \exp\!\left(-\frac{|\omega_z - \hat{\omega}_z|^2}{\sigma_\omega}\right)
-$$
-
-$$
-R_{\text{motion}} = R_{\text{lin}} + \alpha_{\text{ang}} \cdot R_{\text{ang}}
-$$
-
-Paper values: `σ_v = σ_ω = 0.25` (this is the divisor inside `exp`, not its square root), `α_ang = 0.5`. Hatted symbols are commands.
-
-Note: `σ_v = 0.25` matches Isaac Lab's existing `track_lin_vel_xy_exp(std=0.5)` — that function divides by `std**2 = 0.25`. So the upstream tracking term parameters already match the paper. No change to the math; we re-implement inside the composite.
-
-### 2.3 Energy Reward (Paper Eq. 4)
+### 2.1 Energy Reward (Paper Eq. 4)
 
 $$
 R_{\text{en}} = \exp\!\left(-\frac{\sum_i |\tau_i|\,|\dot{q}_i|}{\sigma_{\text{en},x}\,|v_x| + \sigma_{\text{en},z}\,|\omega_z|}\right)
 $$
 
-Paper values: `σ_en,x = 1000`, `σ_en,z = 500`, `α_en = 1.0`. The denominator is "generalized distance" — translation contribution plus rotation contribution. Setting `σ_en,z = 0` reduces to the conventional Cost of Transport definition.
+Paper values: `σ_en,x = 1000`, `σ_en,z = 500`, `α_en = 1.0`. Hatted symbols are commands; unhatted are actual body velocities.
 
-The numerator `Σ |τ_i| · |q̇_i|` is mechanical power magnitude per joint, summed. Already implemented in upstream `mdp.energy` — we reuse the formula but compose differently.
+### 2.2 Floor for Denominator
 
-`v_x`, `ω_z` are the **actual** body linear and angular velocities (not commands). Read from `root_lin_vel_b[:, 0]` and `root_ang_vel_b[:, 2]`.
-
-### 2.4 Floor for Denominator
-
-Paper does not specify how they handle the singularity when `v_x ≈ 0` and `ω_z ≈ 0` (denominator → 0). We add a small floor `eps` to avoid division by zero:
+Paper does not specify singularity handling. We add `eps = 0.1`:
 
 $$
 \text{denom} = \max(\sigma_{\text{en},x}\,|v_x| + \sigma_{\text{en},z}\,|\omega_z|,\ \varepsilon)
 $$
 
-Default `eps = 0.1`. Document this as a deviation from the paper.
+## 3. Why Additive (Departure from Run 1)
 
-### 2.5 Auxiliary Reward `R_aux`
+Run 1 used multiplicative composition `R = (R_motion + α_en·R_en) · exp(-R_aux)`. Run 1 failed: policy converged to a low-power shuffle without gait differentiation across speeds. Diagnosis: stripping the upstream reward stack and replacing with custom composite removed structural support that the policy needed.
 
-Paper Section IV-A specifies `R_aux` contents: "collision avoidance, action rate control and trunk orientation regularization … penalizing limb-ground collision, out-of-range joint position, and high frequency joint action."
+Liang paper itself acknowledges (Section IV-A): "Compared to ANYmal-C, we found that the energy reward R_en alone is insufficient to regularize Go1's behavior, which is likely due to the lighter weight compared to its motor power. Thus, following the settings in [Margolis 2022], we further add a fixed auxiliary reward R_aux to (2)..."
 
-`R_aux` is the **non-negative** sum of penalty magnitudes. Each contributing term is a non-negative quantity (squared norm, distance, count) multiplied by the absolute value of its weight. Sign convention is critical: `R_aux ≥ 0` always; it goes inside `exp(-R_aux)` so larger means more attenuation.
+In practice: lighter quadrupeds need substantial auxiliary structure beyond just energy reward. The paper used the multiplicative form on Go1; on Go2 in Isaac Lab the multiplicative form did not transfer.
 
-## 3. Why Multiplicative
+**Run 2 strategy:** keep the proven additive baseline that already tracks 0–4 m/s. Add `α_en · R_en` as a new additive term. Drop only the gait-biasing terms paper explicitly removed. Single-variable change vs. proven baseline. Cleaner experiment.
 
-From the existing progress update, Section 1.1: at sprint commands the additive penalties exceed the 2.25 tracking ceiling, producing a standing-still local optimum. The current workaround (`_apply_sprint_retune`) weakens five penalty weights to recover a positive optimum at sprint speed. This workaround was flagged in the progress update Q2 as "not fully understood — how much of the bin-6/7 noise is the retune versus the curriculum itself?"
+## 4. Files
 
-Multiplicative shielding eliminates the standing-still trap structurally:
+### 4.1 Modify: `liang_composite_reward.py`
 
-- `R_motion + α_en · R_en ∈ [0, ~2.5]` always
-- `exp(-R_aux) ∈ (0, 1]` always
-- Therefore `R ≥ 0` always — penalties cannot invert the sign of the reward, only attenuate it
+Add a new function `energy_cot` implementing Eq. 4. Keep the existing `composite_liang_energy_reward` function in place (unused but available for reference) — do not delete.
 
-`_apply_sprint_retune` becomes obsolete and is removed. Action scale (currently 0.35, was 0.25 upstream) is kept at 0.35 because it is a platform setup parameter (joint range of motion needed for the sprint envelope), not a reward-shaping workaround.
-
-## 4. Reward Bucket Assignment
-
-Map the 16 existing reward terms in the upstream Go2 reward stack into the paper's three buckets, plus drops.
-
-### `R_motion` (2 terms)
-
-| Existing term | Notes |
-|---|---|
-| `track_lin_vel_xy` | Becomes `R_lin` inside composite |
-| `track_ang_vel_z` | Becomes `α_ang · R_ang` with α_ang = 0.5 |
-
-### `R_en` (replaces existing `energy`)
-
-| Existing term | Notes |
-|---|---|
-| `energy` | Replace with new `energy_cot` formulation per Eq. 4 |
-
-### `R_aux` (7 terms)
-
-| Existing term | Why included |
-|---|---|
-| `dof_pos_limits` | Paper: out-of-range joint position |
-| `action_rate` | Paper: high frequency joint action |
-| `undesired_contacts` | Paper: limb-ground collision |
-| `flat_orientation_l2` | Paper: trunk orientation regularization |
-| `base_linear_velocity` (lin_vel_z_l2) | Vertical body stability — prevents pronk/bounce |
-| `base_angular_velocity` (ang_vel_xy_l2) | Roll/pitch body stability |
-| `feet_slide` | Foot dynamics safety, sim-to-real |
-
-### Dropped (5 terms)
-
-| Existing term | Why dropped |
-|---|---|
-| `feet_air_time` | Gait-biasing, paper Section IV-A explicitly removes this class of reward |
-| `air_time_variance` | Gait-biasing, punishes legitimate 4-beat walk asymmetry |
-| `joint_vel` (Σ q̇²) | Subsumed by energy term (energy already penalizes q̇ via τ·q̇ product) |
-| `joint_acc` (Σ q̈²) | Not in paper R_aux; smoothness handled by action_rate |
-| `joint_torques` (Σ τ²) | Subsumed by energy term |
-| `joint_pos` (default-pose penalty) | Not in paper; biases against running posture, conflicts with energy minimization at high speed |
-
-The 7 R_aux terms keep their **upstream** weights (not sprint_retune values). With multiplicative shielding, the sprint-retune weakening is no longer required.
-
-## 5. Files
-
-No hard-coded paths in this document — local session resolves them in the existing project structure. Files referenced by role:
-
-### 5.1 New file: composite reward module
-
-A new Python module under the curriculum_rl envs package containing one function: `composite_liang_energy_reward`. It computes `R_motion`, `R_en`, `R_aux` internally and returns the multiplicative composition.
-
-### 5.2 Modified file: Go2 base velocity environment configuration
-
-The file currently containing `_apply_sprint_retune` and `Go2VelocityBaseEnvCfg`. Modifications:
-
-- Remove the call to `_apply_sprint_retune` (function can stay defined but unused, or delete — implementer's choice)
-- Add a new function `_apply_liang_composite_rewards(cfg)` that:
-  - Sets weights of dropped terms (`feet_air_time`, `air_time_variance`, `joint_vel`, `joint_acc`, `joint_torques`, `joint_pos`) to `0.0`
-  - Sets the existing `energy` term's weight to `0.0` (it is replaced by the composite)
-  - Sets `track_lin_vel_xy.weight = 1e-8` (logging-only; see Section 7 on curriculum compatibility)
-  - Sets `track_ang_vel_z.weight = 1e-8` (logging-only)
-  - Keeps R_aux terms (`dof_pos_limits`, `action_rate`, `undesired_contacts`, `flat_orientation_l2`, `base_linear_velocity`, `base_angular_velocity`, `feet_slide`) at their upstream weights — do not apply sprint-retune values to these
-  - Adds a new reward term `composite_liang` calling the new function with weight `1.0`
-- Action scale stays at `0.35` (kept as platform setup)
-- Call `_apply_liang_composite_rewards(self)` from `__post_init__` of both `Go2VelocityBaseEnvCfg` and `Go2VelocityBasePlayEnvCfg`
-
-### 5.3 Files NOT touched
-
-- Any file under `unitree_rl_lab/`
-- Any file under `curriculum_rl/curricula/`
-- Any file under `curriculum_rl/eval/`
-- Any file under `curriculum_rl/figures/`
-- The MDP module `curriculum_rl/envs/mdp.py` (curriculum step logic stays as-is)
-- All command, observation, termination, and PPO configuration
-
-## 6. Composite Reward Function Specification
-
-The function signature returns a `(num_envs,)` tensor of per-env reward values. The implementation must follow this exact math; deviations are bugs.
-
-### 6.1 Inputs
-
-- `env`: `ManagerBasedRLEnv`
-- `command_name: str = "base_velocity"`
-- `sigma_v: float = 0.25`
-- `sigma_w: float = 0.25`
-- `alpha_ang: float = 0.5`
-- `sigma_en_x: float = 1000.0`
-- `sigma_en_z: float = 500.0`
-- `alpha_en: float = 1.0`
-- `eps: float = 0.1`
-- `r_aux_clip: float = 10.0`
-- `asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")`
-
-### 6.2 Computation Steps
-
-In order:
-
-1. **Resolve asset and command:**
-   - `asset = env.scene[asset_cfg.name]`
-   - `cmd = env.command_manager.get_command(command_name)` — shape `(N, 3)` for `[v_x_cmd, v_y_cmd, ω_z_cmd]`
-
-2. **Read body-frame state:**
-   - `v_b = asset.data.root_lin_vel_b` — shape `(N, 3)`
-   - `w_b = asset.data.root_ang_vel_b` — shape `(N, 3)`
-   - `v_x = v_b[:, 0]`, `v_y = v_b[:, 1]` — actual body-frame linear velocity components
-   - `w_z = w_b[:, 2]` — actual body-frame yaw rate
-
-3. **Compute R_lin (Eq. 3, linear):**
-
-   $$R_{\text{lin}} = \exp\!\left(-\frac{(v_x - \hat{v}_x)^2 + (v_y - \hat{v}_y)^2}{\sigma_v}\right)$$
-
-   - `v_err_sq = (v_x - cmd[:, 0])**2 + (v_y - cmd[:, 1])**2`
-   - `R_lin = torch.exp(-v_err_sq / sigma_v)`
-   - Bounded in (0, 1]
-
-4. **Compute R_ang (Eq. 3, angular):**
-
-   $$R_{\text{ang}} = \exp\!\left(-\frac{(\omega_z - \hat{\omega}_z)^2}{\sigma_\omega}\right)$$
-
-   - `w_err_sq = (w_z - cmd[:, 2])**2`
-   - `R_ang = torch.exp(-w_err_sq / sigma_w)`
-   - Bounded in (0, 1]
-
-5. **Compose R_motion:**
-   - `R_motion = R_lin + alpha_ang * R_ang`
-   - Bounded in (0, 1.5]
-
-6. **Compute energy (numerator of Eq. 4):**
-   - `qvel = asset.data.joint_vel[:, asset_cfg.joint_ids]`
-   - `qfrc = asset.data.applied_torque[:, asset_cfg.joint_ids]`
-   - `power = torch.sum(torch.abs(qvel) * torch.abs(qfrc), dim=-1)` — sum over joints, shape `(N,)`
-
-7. **Compute denominator with floor (Eq. 4):**
-
-   $$\text{denom} = \max(\sigma_{\text{en},x}\,|v_x| + \sigma_{\text{en},z}\,|\omega_z|,\ \varepsilon)$$
-
-   - `denom = torch.clamp(sigma_en_x * torch.abs(v_x) + sigma_en_z * torch.abs(w_z), min=eps)`
-
-8. **Compute R_en (Eq. 4):**
-   - `R_en = torch.exp(-power / denom)`
-   - Bounded in (0, 1]
-
-9. **Compute R_aux:**
-
-   The R_aux value is the sum of the 7 R_aux penalty terms' raw quantities multiplied by the absolute value of their cfg weights. Read these from `env.reward_manager`.
-
-   This requires resolving the seven term names and pulling their per-term cfg weights at function-call time, OR hardcoding them at module load. The simpler implementation is to compute the seven penalty quantities directly inside the function using the same primitives as upstream `mdp.*` functions. See section 6.3.
-
-10. **Clip R_aux:**
-    - `R_aux = torch.clamp(R_aux, min=0.0, max=r_aux_clip)`
-    - Without clip, severe violations can drive `R_aux` to >30, causing `exp(-R_aux)` underflow and dead gradient. Clip at 10 keeps `exp(-R_aux) ≥ 4.5e-5`.
-
-11. **Final composite:**
-    - `R = (R_motion + alpha_en * R_en) * torch.exp(-R_aux)`
-    - Bounded in [0, ~2.5]
-    - Return this tensor
-
-### 6.3 R_aux Internal Computation
-
-To avoid coupling to `RewardManager` internals (which would create circular dependencies — composite reward depending on other reward terms' computed values), compute the seven R_aux quantities directly. This means re-implementing the math of those penalty terms inside the composite. The upstream functions used are:
-
-- `dof_pos_limits` magnitude: position clamped outside soft limits, summed L1 over joints
-- `action_rate` magnitude: `||a_t - a_{t-1}||²` summed
-- `undesired_contacts` magnitude: count or contact force magnitude on disallowed bodies
-- `flat_orientation_l2` magnitude: `||projected_gravity_xy||²`
-- `base_linear_velocity` magnitude: `v_z²`
-- `base_angular_velocity` magnitude: `||ω_xy||²`
-- `feet_slide` magnitude: foot xy velocity during contact
-
-For each, multiply by the absolute value of the corresponding upstream weight (NOT the cfg-set weight, which is now 0). Hardcode these reference weights as constants inside the composite function or at module level. The reference weights are the **original upstream values**:
-
-```
-W_DOF_POS_LIMITS    = 10.0
-W_ACTION_RATE       = 0.1
-W_UNDESIRED_CONTACTS = 1.0
-W_FLAT_ORIENTATION  = 2.5
-W_BASE_LIN_VEL_Z    = 2.0
-W_BASE_ANG_VEL_XY   = 0.05
-W_FEET_SLIDE        = 0.1
+```python
+def energy_cot(
+    env: "ManagerBasedRLEnv",
+    sigma_en_x: float = 1000.0,
+    sigma_en_z: float = 500.0,
+    eps: float = 0.1,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+    asset = env.scene[asset_cfg.name]
+    v_x = asset.data.root_lin_vel_b[:, 0]
+    w_z = asset.data.root_ang_vel_b[:, 2]
+    qvel = asset.data.joint_vel[:, asset_cfg.joint_ids]
+    qfrc = asset.data.applied_torque[:, asset_cfg.joint_ids]
+    power = torch.sum(torch.abs(qvel) * torch.abs(qfrc), dim=-1)
+    denom = torch.clamp(
+        sigma_en_x * torch.abs(v_x) + sigma_en_z * torch.abs(w_z),
+        min=eps,
+    )
+    return torch.exp(-power / denom)
 ```
 
-Sum of `W_i * |raw_quantity_i|` gives R_aux. Document each constant at the top of the module with the upstream source so future drift can be traced.
+The function returns shape `(N,)` tensor with values bounded in `(0, 1]`.
 
-## 7. Curriculum Compatibility
+### 4.2 Modify: `go2_velocity_base.py`
 
-The existing curriculum step (`mdp.velocity_curriculum_step` in `curriculum_rl/envs/mdp.py`) reads per-bin tracking reward via:
+Rename `_apply_liang_composite_rewards` → `_apply_liang_additive_energy`.
 
-```
-env.reward_manager._episode_sums["track_lin_vel_xy"] / episode_length / weight
-```
+The function should produce this final cfg state:
 
-If `track_lin_vel_xy.weight = 0`, the division is `0 / 0` → NaN, and curriculum strategies (`uniform`, `task_specific`, `teacher`) all break.
+**Tracking (proven sprint_retune values):**
+- `track_lin_vel_xy.weight = 1.5`
+- `track_lin_vel_xy.params["std"] = 0.5`
+- `track_ang_vel_z.weight = 0.75`
 
-**Fix:** keep `track_lin_vel_xy.weight = 1e-8` and `track_ang_vel_z.weight = 1e-8`. These weights:
-- Contribute negligibly to the additive total (which is dominated by the new `composite_liang` term at weight 1.0)
-- Keep `_episode_sums` populated with non-zero values
-- Allow curriculum's `per_env = episode_sums / ep_len / weight` calculation to recover the per-step `R_lin` value (since `weight × R_lin / weight = R_lin`)
+**Smoothness penalties (proven sprint_retune values — weakened from upstream to allow sprint speeds):**
+- `action_rate.weight = -0.005`
+- `joint_acc.weight = -1e-7`
+- `joint_torques.weight = -2e-5`
+- `joint_vel.weight = -1e-4`
 
-The existing curriculum step code does not require any modification.
+**Body stability (upstream values, kept):**
+- `base_linear_velocity.weight = -2.0`
+- `base_angular_velocity.weight = -0.05`
+- `flat_orientation_l2.weight = -2.5`
+- `dof_pos_limits.weight = -10.0`
+- `undesired_contacts.weight = -1.0`
+- `feet_slide.weight = -0.1`
+- `joint_pos.weight = -0.7`
 
-## 8. Default Parameters Summary
+**Action interface (proven sprint_retune):**
+- `cfg.actions.JointPositionAction.scale = 0.35`
+
+**Gait-biasing — DROP (paper-mandated):**
+- `feet_air_time.weight = 0.0`
+- `air_time_variance.weight = 0.0`
+
+**Energy term — REPLACE function and update params:**
+- `cfg.rewards.energy.func = energy_cot` (new function from `liang_composite_reward.py`)
+- `cfg.rewards.energy.weight = 1.0` (paper's α_en)
+- `cfg.rewards.energy.params = {"sigma_en_x": 1000.0, "sigma_en_z": 500.0, "eps": 0.1}`
+
+**Composite term — DELETE:**
+- Remove the `cfg.rewards.composite_liang = RewTerm(...)` line entirely. The composite is no longer registered.
+
+**Logging-only motion weights — REMOVE the 1e-8 hack:**
+- The 1e-8 weight was a workaround when motion was inside the composite. Now that motion (`track_lin_vel_xy`) is a real additive term at weight 1.5, the curriculum reads from it normally. No special logging hack needed.
+
+The function should be called from `__post_init__` in both `Go2VelocityBaseEnvCfg` and `Go2VelocityBasePlayEnvCfg`, replacing the previous `_apply_liang_composite_rewards` call.
+
+### 4.3 Files NOT Touched
+
+- `unitree_rl_lab/` (any file)
+- `curriculum_rl/curricula/` (any file)
+- `curriculum_rl/eval/`, `curriculum_rl/figures/`
+- `curriculum_rl/envs/mdp.py` (curriculum step logic)
+- `curriculum_rl/envs/commands.py`
+- All observation, termination, PPO config
+
+## 5. Default Parameters Summary
 
 | Parameter | Value | Source |
 |---|---:|---|
-| `σ_v` | 0.25 | Paper Section IV-A |
-| `σ_ω` | 0.25 | Paper Section IV-A |
-| `α_ang` | 0.5 | Paper Section IV-A (Eq. 3) |
 | `σ_en,x` | 1000 | Paper Section IV-A |
 | `σ_en,z` | 500 | Paper Section IV-A |
-| `α_en` | 1.0 | Paper Section IV-A, Fig. 3a |
+| `α_en` (energy weight) | 1.0 | Paper Section IV-A |
 | `eps` | 0.1 | Our deviation (paper does not specify) |
-| `r_aux_clip` | 10.0 | Our deviation (numerical safety) |
-| Composite reward weight | 1.0 | The single active reward term |
-| `track_lin_vel_xy.weight` | 1e-8 | Logging-only for curriculum |
-| `track_ang_vel_z.weight` | 1e-8 | Logging-only for curriculum |
-| Action scale | 0.35 | Kept from sprint-retune (platform setup) |
+| `track_lin_vel_xy.weight` | 1.5 | Sprint retune (proven baseline) |
+| `track_lin_vel_xy.std` | 0.5 | Sprint retune |
+| `track_ang_vel_z.weight` | 0.75 | Sprint retune |
+| `action_rate.weight` | -0.005 | Sprint retune |
+| `joint_acc.weight` | -1e-7 | Sprint retune |
+| `joint_torques.weight` | -2e-5 | Sprint retune |
+| `joint_vel.weight` | -1e-4 | Sprint retune |
+| `feet_air_time.weight` | 0.0 | Paper drops |
+| `air_time_variance.weight` | 0.0 | Paper drops |
+| Action scale | 0.35 | Sprint retune |
 
-## 9. Verification Sequence
+All other R_aux terms keep their upstream values.
 
-The greatest risk is implementation drift on the math. The verification sequence below must be executed before training. Implementer adds a small standalone test script (under the project's existing scripts or tests directory — implementer chooses) that constructs a single env and runs the checks. Do not skip checks — fix any failure before proceeding.
+## 6. Verification
 
-### 9.1 Static checks (no rollout)
+Run 1's `verify_liang_composite.py` tested the multiplicative composite. That composite is no longer registered, so the script's V3-V12 will fail (composite_liang no longer exists). Instead, do a lightweight verification of just the new `energy_cot` function plus a static cfg check.
 
-**V1.** Import the module without errors. Confirm the function signature matches Section 6.1.
+### 6.1 Static cfg check
 
-**V2.** Confirm in the cfg after `__post_init__`:
-- `cfg.rewards.composite_liang.weight == 1.0`
-- `cfg.rewards.track_lin_vel_xy.weight == 1e-8`
-- `cfg.rewards.track_ang_vel_z.weight == 1e-8`
-- All 6 dropped term weights are exactly `0.0`
-- All 7 R_aux term weights match their upstream values (printed for human inspection)
+Add a small print block to verify the cfg state right before training. Either modify `verify_liang_composite.py` or write a new minimal script. The script should:
 
-### 9.2 Runtime checks (single env, 100 steps with random actions)
+1. Construct the cfg
+2. Print all reward term names and their weights
+3. Verify that:
+   - `track_lin_vel_xy.weight == 1.5`
+   - `track_ang_vel_z.weight == 0.75`
+   - `feet_air_time.weight == 0.0`
+   - `air_time_variance.weight == 0.0`
+   - `energy.weight == 1.0`
+   - `energy.func == energy_cot`
+   - `composite_liang` does NOT exist as a cfg field
+   - `actions.JointPositionAction.scale == 0.35`
+4. Confirm all R_aux term weights match upstream values
 
-**V3.** Assert at every step: `R >= 0`. The multiplicative composition guarantees this; if violated, the implementation has a sign error.
+### 6.2 Runtime check
 
-**V4.** Assert at every step: `R_motion ∈ [0, 1.5 + 1e-6]` (allow numerical slack). If exceeded, the motion exp-form is wrong.
+Construct an env, step 100 times with random actions, and assert:
+- `energy_cot(env)` returns shape `(num_envs,)` tensor
+- Values are in `(0, 1]` (allow tiny numerical slack)
+- No NaN / Inf
+- Mean value across 100 steps is in `(0.05, 0.95)` range — i.e., not stuck at 0 or 1
 
-**V5.** Assert at every step: `R_en ∈ [0, 1.0 + 1e-6]`. If exceeded, the energy exp-form is wrong.
+This catches gross implementation errors. The math is simpler than Run 1's composite, so heavy verification is not needed.
 
-**V6.** Assert at every step: `R_aux ∈ [0, r_aux_clip]`. If negative, sign convention on a penalty quantity is wrong.
+## 7. Smoke Test (100 iterations)
 
-**V7.** Print the mean and max of `R_motion`, `R_en`, `R_aux`, and `R` over the 100 steps. Sanity ranges:
-- `R_motion` mean in [0.1, 1.5] — depends on initial random tracking
-- `R_en` mean in [0.05, 0.95] — depends on whether motion is happening
-- `R_aux` mean in [0.05, 1.0] for normal operation; spikes on resets are fine
-- `R` mean in [0.05, 2.0] — log this as the headline number
+After verification passes:
 
-### 9.3 Edge case checks
-
-**V8. Standing still with zero command.** Force one env to have `v_x = v_y = w_z = 0` (manually zero out the body velocities and command, one step). Expected:
-- `R_lin ≈ 1.0` (perfect tracking)
-- `R_ang ≈ 1.0` (perfect tracking)
-- `R_motion ≈ 1.5`
-- `denom = eps = 0.1` (floor active)
-- `R_en = exp(-power / 0.1)`. Power should be near zero (no torque, no motion), so `R_en ≈ 1`.
-- This confirms standing-still is no longer a free-reward trap; it gives `R ≈ 2.5 × exp(-R_aux)`. **Without the energy penalty, it would still be high — the trap is mitigated by walking giving similar reward, not by punishing standing.**
-
-**V9. Sprint command with zero motion.** Force one env to have command `v_x = 4.0`, actual `v_x = 0`. Expected:
-- `R_lin = exp(-16 / 0.25) = exp(-64) ≈ 0` (huge tracking error)
-- `R_ang ≈ 1.0` (yaw OK)
-- `R_motion ≈ 0.5` (only ang_track contributing)
-- This is much lower than V8's 1.5. So with multiplicative composition, sprint-with-zero-motion is **worse** than standing-with-zero-command — the policy has incentive to actually move at sprint command. (In the additive system, both would be similar after sprint_retune; this is the qualitative improvement.)
-
-**V10. Hardware-violation case.** Force one env into a joint-limit violation (set joint pos to limit + 0.5 rad). Expected:
-- `dof_pos_limits` quantity > 0
-- `R_aux` jumps significantly
-- `R` drops via the `exp(-R_aux)` factor
-- Confirms the multiplicative shielding works
-
-### 9.4 Numerical stability checks
-
-**V11.** Run 1000 random steps. Assert no NaN, no Inf in `R`, `R_motion`, `R_en`, `R_aux` at any step.
-
-**V12.** Confirm `denom` floor is engaging at low actual velocity. Print `(denom == eps).float().mean()` over the 1000 steps. Expect non-zero fraction (should engage during stationary or near-stationary moments).
-
-## 10. Smoke Test (Before Full Training)
-
-After verification passes, run a 100-iteration training to confirm the system learns at all under the new reward.
-
-```
-python src/scripts/train.py --condition uniform --seed 0 max_iterations=100
+```bash
+python src/scripts/train.py --condition uniform --seed 0 --max_iterations 100 --headless
 ```
 
-(Implementer adapts argument syntax to existing entry point. The point is: 100 iterations on uniform sampler, single seed.)
-
-**Expected at iteration 100:**
-
-- Mean episode length grows toward `episode_length_s` (= 20 s = 1000 steps); should be at least 100 steps mean by iter 100.
-- Mean total reward `R` per step is in [0.5, 2.5] range.
-- Mean `R_lin` (logged via the 1e-8 weight on `track_lin_vel_xy`) is positive and trending upward.
-- No NaN in any logged scalar.
-- Curriculum step logs (in `curriculum.csv`) show non-zero `mean_reward` per bin.
-
-If any of these fail, do not proceed. Diagnose first.
-
-## 11. Full Training Run
-
-After smoke test passes, run the full training. Single condition (Uniform), two seeds, 3000 iterations:
-
-```
-bash src/scripts/run_sweep.sh
-```
-
-(Or whatever invocation pattern the existing sweep script uses. The implementer ensures only the Uniform condition is enabled for this experiment, and only seeds 0 and 1 are run.)
-
-Expected wall-clock: ~30 min × 2 seeds = ~60 min total on the user's RTX 4070 Ti SUPER, matching the main-branch throughput baseline.
-
-If wall-clock exceeds 90 min, the composite reward function has a Python loop or host-device sync that needs to be diagnosed before further runs.
-
-## 12. New Plots
-
-**None.** The existing plotting infrastructure is reused without modification:
-- `convergence.png`, `epte_bars.png`, `iterations_to_mastery.png`, `survival.png`, `v_actual_vs_cmd.png`, `sampling_heatmap.png`, `gait_diagram.png`, `action_rate.png`
-
-The gait diagram (`plot_gait_diagram.py`) is the primary visual output for this experiment — it shows foot contact patterns over a 3-second window per (condition, bin), which is exactly what we need to verify gait emergence.
-
-The CoT-vs-velocity plot from Liang Fig. 3a is a useful additional figure but is **not required** for this implementation. Do not add new plotting code unless asked.
-
-## 13. Acceptance Criteria
-
-The implementation is acceptable if all of the following hold after the full Uniform 3000-iter × 2-seed run:
+### 7.1 Expected TensorBoard Scalars at Iter 99
 
 **Training health:**
-- Both seeds complete with exit code 0
-- Mean episode length at iter 3000 ≥ 800 steps on bins 0–5
-- No NaN in any logged scalar at any iteration
+- `Train/mean_episode_length` ≥ 200 steps and growing
+- `Train/mean_reward` positive (range 5–50)
 
-**Tracking:**
-- `R_lin` at iter 3000 (mean over 2 seeds) ≥ 0.7 on bins 0–4
-- `R_lin` at iter 3000 (mean over 2 seeds) ≥ 0.5 on bins 5–7
-- Achieved velocity matches commanded velocity within 0.3 m/s on bins 0–5 in eval rollouts
+**Episode_Reward terms (which should be present and approximately what magnitudes):**
+- `Episode_Reward/track_lin_vel_xy` — positive, growing, in range 50–500 by iter 99
+- `Episode_Reward/track_ang_vel_z` — positive
+- `Episode_Reward/energy` — positive, in range 100–800 (≈ R_en × ~1000 steps × weight 1.0)
+- `Episode_Reward/action_rate` — negative, small
+- `Episode_Reward/dof_pos_limits` — small or zero
+- `Episode_Reward/flat_orientation_l2` — negative, small
+- `Episode_Reward/feet_slide` — negative, small
+- `Episode_Reward/undesired_contacts` — small or zero
+
+**Episode_Reward terms that MUST be zero:**
+- `Episode_Reward/feet_air_time` — exactly 0.0 (weight is 0)
+- `Episode_Reward/air_time_variance` — exactly 0.0 (weight is 0)
+
+**Episode_Reward terms that MUST NOT exist:**
+- `Episode_Reward/composite_liang` — not in scalars list
+
+**Termination:**
+- `Episode_Termination/time_out` — non-zero (good, episodes reaching end)
+- `Episode_Termination/bad_orientation` and `base_contact` — small or zero
+
+### 7.2 Smoke Test Gates (Stop and Diagnose if Any Fail)
+
+- `mean_episode_length` < 100 by iter 99 → policy collapsing, do not proceed
+- `mean_reward` strongly negative → penalties dominating, check weights
+- `composite_liang` still in scalars list → cfg not actually updated, did not delete the term
+- NaN in any scalar → bug in `energy_cot`, check denominator floor
+
+## 8. Full Training (Only After Smoke Passes)
+
+```bash
+python src/scripts/train.py --condition uniform --seed 0 --max_iterations 3000 --headless
+```
+
+Wall-clock target: ~30 min on RTX 4070 Ti SUPER (matches main-branch baseline since reward stack is now close to baseline).
+
+If wall-clock exceeds 60 min, stop — something is slow that wasn't before.
+
+After seed 0 completes, paste:
+- Final `Train/mean_reward` and `Train/mean_episode_length`
+- All `Episode_Reward/*` final values
+- `Metrics/base_velocity/error_vel_xy` and `error_vel_yaw` final
+- All `Episode_Termination/*` final
+- Snapshot at iter 1500 of `Train/mean_reward` and `error_vel_xy` (mid-training health check)
+- Wall-clock time
+
+Do not start seed 1 until seed 0 is reviewed.
+
+## 9. Acceptance Criteria
+
+The implementation is acceptable if all of the following hold after Uniform 3000-iter run:
+
+**Training health:**
+- Exit code 0
+- `Train/mean_episode_length` at iter 3000 ≥ 800 (out of 1000 max)
+- No NaN at any iteration
+
+**Tracking (this should match or beat the curriculum study baseline):**
+- `error_vel_xy` ≤ 0.3 m/s on bins 0–4
+- `error_vel_xy` ≤ 0.6 m/s on bins 5–7 (high-speed allowed to be worse)
 
 **Gait emergence (the actual experimental question):**
-- Gait diagram on bin 0 (0.25 m/s) shows visibly different contact pattern than bin 6 (3.25 m/s)
+- Visual inspection of `gait_diagram.png`: low-speed bins show different contact pattern than high-speed bins
+- Duty factor (computed from foot contact data) decreases monotonically (or roughly so) with speed
 - High-speed bins (≥ 2.5 m/s) show shorter stance fraction than low-speed bins
-- At least one of bins 5/6/7 shows visible flight phase (all four feet off ground simultaneously) for at least 20 ms per stride
-
-If gait emergence criteria are not met but tracking is healthy, the fallback is one re-tune attempt: bump `α_en` from 1.0 to 1.5, watching for tracking degradation per the paper's Fig. 3a observation. If second attempt also fails, rollback this branch and reconsider design.
+- At least one bin among 5/6/7 shows visible flight phase (all four feet airborne briefly)
 
 **Hardware safety:**
-- p95 joint velocity over all rollouts ≤ 28 rad/s on every bin (Go2 hardware envelope)
+- p95 joint velocity ≤ 28 rad/s on every bin
 
-## 14. Things That Will NOT Be Touched
+If gait emergence criteria fail but tracking is healthy → write up as honest negative result. Do not retune further. The energy reward in additive form on Go2 in Isaac Lab is what it is.
 
-To prevent scope creep:
+## 10. Workflow
 
-- The three curriculum strategies (uniform / task_specific / teacher) — code unchanged, only Uniform is exercised in this experiment
+1. **Read this entire document first.**
+2. Modify `liang_composite_reward.py` — add `energy_cot` function. Keep existing composite function.
+3. Modify `go2_velocity_base.py` — rename function, update body, delete composite_liang registration.
+4. Run static cfg check (Section 6.1). Paste output. **Wait for review before continuing.**
+5. Run runtime energy check (Section 6.2). Paste output. **Wait for review before continuing.**
+6. Run smoke test (Section 7). Paste TensorBoard scalars. **Wait for review.**
+7. If smoke passes, run full 3000-iter training (Section 8). Paste metrics. **Wait for review.**
+8. **Do not commit.** All commits require explicit confirmation per CLAUDE.md.
+
+## 11. Things That Will NOT Be Touched
+
+- Three curriculum strategies (uniform / task_specific / teacher) — code unchanged, only Uniform exercised
 - `mdp.py` curriculum step logic
 - Observation / critic specifications
 - Termination conditions
-- PPO hyperparameters (network, learning rate, entropy coefficient, etc.)
+- PPO hyperparameters
 - Domain randomization
-- Action interface (joint position action with scale 0.35)
+- Sim parameters (dt, decimation)
 
-If during implementation any of these appear to need changes to make the composite reward work, **stop and report back** rather than modifying. That kind of cascading change is the warning sign of a wrong abstraction, not a license to refactor.
+If during implementation any of these appear to need changes, **stop and report back** rather than modifying.
 
-## 15. Deviations From Paper (Document for Submission)
+## 12. Deviations From Paper (For Final Writeup)
 
-The following deviations from Liang et al. 2024 are intentional and must be acknowledged in the write-up:
+1. **Floor on energy denominator (`eps = 0.1`).** Paper does not specify.
+2. **Additive composition instead of multiplicative.** Paper uses `R = (R_motion + α_en·R_en) · exp(-R_aux)`; we use `R = R_motion + α_en·R_en + R_aux_additive`. Run 1 attempted faithful multiplicative form and failed. Run 2 uses additive. This is a meaningful methodological deviation that must be documented.
+3. **R_aux contents.** We use Isaac Lab Go2 upstream stack with sprint_retune (12 active terms), which is in spirit similar to but not identical to Liang's R_aux from WTW. Paper's R_aux block is borrowed from Margolis 2022.
+4. **Hardware platform.** Paper used Go1 + ANYmal-C with `α_en = 1.0`. We use Go2 with the same `α_en = 1.0`.
+5. **Simulator.** Paper used IsaacGym; we use Isaac Lab (Isaac Sim 4.5 / PhysX). Documented performance regressions in this version may affect outcomes.
 
-1. **Floor on energy denominator (`eps = 0.1`).** Paper does not specify singularity handling.
-2. **Clip on R_aux (`r_aux_clip = 10`).** Paper does not specify; needed for numerical stability.
-3. **Logging-only motion weights (`1e-8`).** Implementation artifact for compatibility with the existing curriculum-tracking infrastructure. Mathematically negligible.
-4. **R_aux contents.** Paper specifies "collision avoidance, action rate control and trunk orientation regularization" — we include 7 terms covering these plus body stability. Document the 7 terms and their weights.
-5. **Hardware platform.** Paper used Go1 + ANYmal-C with `α_en = 1.0`. We use Go2 with the same `α_en = 1.0` — Go2 is the direct successor of Go1 with similar mass and leg length, so the same scaling is expected to work. If empirically `α_en = 1.0` is too weak/strong on Go2, this is a tunable parameter and the deviation is benign.
-6. **Composition at the framework level.** Paper applies multiplicative composition directly. Isaac Lab's `RewardManager` is additive; the multiplicative form is implemented inside a single composite reward function. This is a faithful re-expression, not a mathematical deviation.
+## 13. If Run 2 Also Fails
+
+If after Section 9 acceptance check fails (tracking is fine but gait emergence absent), **do not retry**. Time budget exhausted. Write up as:
+
+> "We implemented Liang 2024's energy-driven gait emergence on Go2 in Isaac Lab, both in the paper's faithful multiplicative form (Run 1) and an additive variant (Run 2). Tracking succeeded. Gait emergence did not transfer cleanly. Hypotheses for non-transfer: (i) platform sensitivity (paper used Go1 12kg + ANYmal-C 50kg; Go2 sits between but closer to Go1, the regime paper itself reports as marginal), (ii) simulator differences (paper used IsaacGym; we used Isaac Lab with documented PhysX regression in v4.5), (iii) α_en tuning may need platform-specific calibration not provided in paper."
+
+That is a defensible scientific contribution. Negative results matter.

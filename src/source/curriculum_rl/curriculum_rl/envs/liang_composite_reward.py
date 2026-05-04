@@ -22,6 +22,26 @@ W_BASE_ANG_VEL_XY = 0.05
 W_FEET_SLIDE = 0.1
 
 
+def energy_cot(
+    env: "ManagerBasedRLEnv",
+    sigma_en_x: float = 1000.0,
+    sigma_en_z: float = 500.0,
+    eps: float = 0.1,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+    asset = env.scene[asset_cfg.name]
+    v_x = asset.data.root_lin_vel_b[:, 0]
+    w_z = asset.data.root_ang_vel_b[:, 2]
+    qvel = asset.data.joint_vel[:, asset_cfg.joint_ids]
+    qfrc = asset.data.applied_torque[:, asset_cfg.joint_ids]
+    power = torch.sum(torch.abs(qvel) * torch.abs(qfrc), dim=-1)
+    denom = torch.clamp(
+        sigma_en_x * torch.abs(v_x) + sigma_en_z * torch.abs(w_z),
+        min=eps,
+    )
+    return torch.exp(-power / denom)
+
+
 def composite_liang_energy_reward(
     env: "ManagerBasedRLEnv",
     command_name: str = "base_velocity",

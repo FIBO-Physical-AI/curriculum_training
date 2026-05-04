@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from isaaclab.managers import CurriculumTermCfg as CurrTerm
-from isaaclab.managers import RewardTermCfg as RewTerm
 from isaaclab.utils import configclass
 
 from unitree_rl_lab.tasks.locomotion.robots.go2.velocity_env_cfg import (
@@ -11,7 +10,7 @@ from unitree_rl_lab.tasks.locomotion.robots.go2.velocity_env_cfg import (
 
 from curriculum_rl.envs import mdp as curriculum_mdp
 from curriculum_rl.envs.commands import BinnedVelocityCommandCfg
-from curriculum_rl.envs.liang_composite_reward import composite_liang_energy_reward
+from curriculum_rl.envs.liang_composite_reward import energy_cot
 
 
 V_MAX = 4.0
@@ -60,32 +59,20 @@ def _apply_sprint_retune(cfg) -> None:
     cfg.actions.JointPositionAction.scale = 0.35
 
 
-def _apply_liang_composite_rewards(cfg) -> None:
-    cfg.rewards.base_linear_velocity = None
-    cfg.rewards.base_angular_velocity = None
-    cfg.rewards.joint_vel = None
-    cfg.rewards.joint_acc = None
-    cfg.rewards.joint_torques = None
-    cfg.rewards.action_rate = None
-    cfg.rewards.dof_pos_limits = None
-    cfg.rewards.energy = None
-    cfg.rewards.flat_orientation_l2 = None
-    cfg.rewards.joint_pos = None
-    cfg.rewards.feet_air_time = None
-    cfg.rewards.air_time_variance = None
-    cfg.rewards.feet_slide = None
-    cfg.rewards.undesired_contacts = None
-
-    cfg.rewards.track_lin_vel_xy.weight = 1e-8
-    cfg.rewards.track_ang_vel_z.weight = 1e-8
-
+def _apply_liang_additive_energy(cfg) -> None:
+    cfg.rewards.track_lin_vel_xy.weight = 1.5
+    cfg.rewards.track_lin_vel_xy.params["std"] = 0.5
+    cfg.rewards.track_ang_vel_z.weight = 0.75
+    cfg.rewards.action_rate.weight = -0.005
+    cfg.rewards.joint_acc.weight = -1e-7
+    cfg.rewards.joint_torques.weight = -2e-5
+    cfg.rewards.joint_vel.weight = -1e-4
+    cfg.rewards.feet_air_time.weight = 0.0
+    cfg.rewards.air_time_variance.weight = 0.0
+    cfg.rewards.energy.func = energy_cot
+    cfg.rewards.energy.weight = 1.0
+    cfg.rewards.energy.params = {"sigma_en_x": 1000.0, "sigma_en_z": 500.0, "eps": 0.1}
     cfg.actions.JointPositionAction.scale = 0.35
-
-    cfg.rewards.composite_liang = RewTerm(
-        func=composite_liang_energy_reward,
-        weight=1.0,
-        params={"command_name": "base_velocity"},
-    )
 
 
 def _apply_play_camera(cfg) -> None:
@@ -113,7 +100,7 @@ class Go2VelocityBaseEnvCfg(RobotEnvCfg):
     def __post_init__(self):
         super().__post_init__()
         _flatten_terrain(self)
-        _apply_liang_composite_rewards(self)
+        _apply_liang_additive_energy(self)
         self.sim.physx.gpu_max_rigid_patch_count = 20 * 2**15
         self.scene.robot.spawn.articulation_props.enabled_self_collisions = False
         self.commands.base_velocity = _make_binned_cmd(self.curriculum_kind)
@@ -131,7 +118,7 @@ class Go2VelocityBasePlayEnvCfg(RobotPlayEnvCfg):
     def __post_init__(self):
         super().__post_init__()
         _flatten_terrain(self)
-        _apply_liang_composite_rewards(self)
+        _apply_liang_additive_energy(self)
         _lock_play_pose(self)
         _apply_play_camera(self)
         self.sim.physx.gpu_max_rigid_patch_count = 20 * 2**15

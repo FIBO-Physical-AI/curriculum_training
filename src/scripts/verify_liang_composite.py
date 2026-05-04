@@ -87,12 +87,6 @@ def main() -> int:
         "joint_torques",
         "joint_pos",
         "energy",
-    ):
-        w = getattr(rew, name).weight
-        failures += _check(f"V2 dropped: {name}.weight == 0.0", w == 0.0, f"got {w}")
-    print()
-    print("R_aux additive cfg weights (must be 0.0 - composite computes R_aux internally):")
-    for name in (
         "dof_pos_limits",
         "action_rate",
         "undesired_contacts",
@@ -101,8 +95,8 @@ def main() -> int:
         "base_angular_velocity",
         "feet_slide",
     ):
-        w = getattr(rew, name).weight
-        failures += _check(f"V2 R_aux additive: {name}.weight == 0.0", w == 0.0, f"got {w}")
+        term = getattr(rew, name, None)
+        failures += _check(f"V2 deleted: {name} is None", term is None, f"got {term}")
     print()
     print("R_aux internal weights (used by composite for R_aux sum):")
     for name, val in (

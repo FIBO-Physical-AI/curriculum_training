@@ -61,24 +61,23 @@ def _apply_sprint_retune(cfg) -> None:
 
 
 def _apply_liang_composite_rewards(cfg) -> None:
-    cfg.rewards.feet_air_time.weight = 0.0
-    cfg.rewards.air_time_variance.weight = 0.0
-    cfg.rewards.joint_vel.weight = 0.0
-    cfg.rewards.joint_acc.weight = 0.0
-    cfg.rewards.joint_torques.weight = 0.0
-    cfg.rewards.joint_pos.weight = 0.0
-    cfg.rewards.energy.weight = 0.0
+    cfg.rewards.base_linear_velocity = None
+    cfg.rewards.base_angular_velocity = None
+    cfg.rewards.joint_vel = None
+    cfg.rewards.joint_acc = None
+    cfg.rewards.joint_torques = None
+    cfg.rewards.action_rate = None
+    cfg.rewards.dof_pos_limits = None
+    cfg.rewards.energy = None
+    cfg.rewards.flat_orientation_l2 = None
+    cfg.rewards.joint_pos = None
+    cfg.rewards.feet_air_time = None
+    cfg.rewards.air_time_variance = None
+    cfg.rewards.feet_slide = None
+    cfg.rewards.undesired_contacts = None
 
     cfg.rewards.track_lin_vel_xy.weight = 1e-8
     cfg.rewards.track_ang_vel_z.weight = 1e-8
-
-    cfg.rewards.dof_pos_limits.weight = 0.0
-    cfg.rewards.action_rate.weight = 0.0
-    cfg.rewards.undesired_contacts.weight = 0.0
-    cfg.rewards.flat_orientation_l2.weight = 0.0
-    cfg.rewards.base_linear_velocity.weight = 0.0
-    cfg.rewards.base_angular_velocity.weight = 0.0
-    cfg.rewards.feet_slide.weight = 0.0
 
     cfg.actions.JointPositionAction.scale = 0.35
 

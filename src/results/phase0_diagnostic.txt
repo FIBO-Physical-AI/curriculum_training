@@ -1,0 +1,213 @@
+[diag] script start
+[diag] cwd = /home/drl-68/curriculum_training/unitree_rl_lab
+[diag] launching AppLauncher (headless)...
+[INFO][AppLauncher]: Loading experience file: /home/drl-68/IsaacLab/apps/isaaclab.python.headless.kit
+[diag] AppLauncher up
+[diag] parsing env cfg for Curriculum-Go2-Velocity-Uniform (play entry)...
+[INFO]: Parsing configuration from: curriculum_rl.envs.go2_velocity_uniform:UniformCurriculumPlayEnvCfg
+[diag] env_cfg.scene.num_envs = 512
+[diag] creating env...
+[INFO]: Base environment:
+	Environment device    : cuda:0
+	Environment seed      : None
+	Physics step-size     : 0.005
+	Rendering step-size   : 0.02
+	Environment step-size : 0.02
+[INFO]: Time taken for scene creation : 1.921006 seconds
+[INFO]: Scene manager:  <class InteractiveScene>
+	Number of environments: 512
+	Environment spacing   : 2.5
+	Source prim name      : /World/envs/env_0
+	Global prim paths     : ['/World/ground']
+	Replicate physics     : True
+[INFO] Event Manager:  <EventManager> contains 3 active terms.
++--------------------------------------+
+| Active Event Terms in Mode: 'startup' |
++----------+---------------------------+
+|  Index   | Name                      |
++----------+---------------------------+
+|    0     | physics_material          |
+|    1     | add_base_mass             |
++----------+---------------------------+
++---------------------------------------+
+|  Active Event Terms in Mode: 'reset'  |
++--------+------------------------------+
+| Index  | Name                         |
++--------+------------------------------+
+|   0    | base_external_force_torque   |
+|   1    | reset_base                   |
+|   2    | reset_robot_joints           |
++--------+------------------------------+
++----------------------------------------------+
+|    Active Event Terms in Mode: 'interval'    |
++-------+------------+-------------------------+
+| Index | Name       | Interval time range (s) |
++-------+------------+-------------------------+
+|   0   | push_robot |       (5.0, 10.0)       |
++-------+------------+-------------------------+
+
+[INFO]: Starting the simulation. This may take a few seconds. Please wait...
+[INFO]: Time taken for simulation start : 0.792671 seconds
+[INFO] Command Manager:  <CommandManager> contains 1 active terms.
++-----------------------------------------------+
+|              Active Command Terms             |
++-------+---------------+-----------------------+
+| Index | Name          |          Type         |
++-------+---------------+-----------------------+
+|   0   | base_velocity | BinnedVelocityCommand |
++-------+---------------+-----------------------+
+
+[INFO] Recorder Manager:  <RecorderManager> contains 0 active terms.
++---------------------+
+| Active Recorder Terms |
++-----------+---------+
+|   Index   | Name    |
++-----------+---------+
++-----------+---------+
+
+[INFO] Action Manager:  <ActionManager> contains 1 active terms.
++-----------------------------------------+
+|     Active Action Terms (shape: 12)     |
++-------+---------------------+-----------+
+| Index | Name                | Dimension |
++-------+---------------------+-----------+
+|   0   | JointPositionAction |        12 |
++-------+---------------------+-----------+
+
+[INFO] Observation Manager: <ObservationManager> contains 2 groups.
++---------------------------------------------------------+
+| Active Observation Terms in Group: 'policy' (shape: (45,)) |
++-----------+---------------------------------+-----------+
+|   Index   | Name                            |   Shape   |
++-----------+---------------------------------+-----------+
+|     0     | base_ang_vel                    |    (3,)   |
+|     1     | projected_gravity               |    (3,)   |
+|     2     | velocity_commands               |    (3,)   |
+|     3     | joint_pos_rel                   |   (12,)   |
+|     4     | joint_vel_rel                   |   (12,)   |
+|     5     | last_action                     |   (12,)   |
++-----------+---------------------------------+-----------+
++---------------------------------------------------------+
+| Active Observation Terms in Group: 'critic' (shape: (60,)) |
++-----------+---------------------------------+-----------+
+|   Index   | Name                            |   Shape   |
++-----------+---------------------------------+-----------+
+|     0     | base_lin_vel                    |    (3,)   |
+|     1     | base_ang_vel                    |    (3,)   |
+|     2     | projected_gravity               |    (3,)   |
+|     3     | velocity_commands               |    (3,)   |
+|     4     | joint_pos_rel                   |   (12,)   |
+|     5     | joint_vel_rel                   |   (12,)   |
+|     6     | joint_effort                    |   (12,)   |
+|     7     | last_action                     |   (12,)   |
++-----------+---------------------------------+-----------+
+
+[INFO] Termination Manager:  <TerminationManager> contains 3 active terms.
++------------------------------------+
+|      Active Termination Terms      |
++-------+-----------------+----------+
+| Index | Name            | Time Out |
++-------+-----------------+----------+
+|   0   | time_out        |   True   |
+|   1   | base_contact    |  False   |
+|   2   | bad_orientation |  False   |
++-------+-----------------+----------+
+
+[INFO] Reward Manager:  <RewardManager> contains 16 active terms.
++-----------------------------------------+
+|           Active Reward Terms           |
++-------+-----------------------+---------+
+| Index | Name                  |  Weight |
++-------+-----------------------+---------+
+|   0   | track_lin_vel_xy      |     1.5 |
+|   1   | track_ang_vel_z       |    0.75 |
+|   2   | base_linear_velocity  |    -2.0 |
+|   3   | base_angular_velocity |   -0.05 |
+|   4   | joint_vel             | -0.0001 |
+|   5   | joint_acc             |  -1e-07 |
+|   6   | joint_torques         |  -2e-05 |
+|   7   | action_rate           |  -0.005 |
+|   8   | dof_pos_limits        |   -10.0 |
+|   9   | energy                |     1.0 |
+|   10  | flat_orientation_l2   |    -2.5 |
+|   11  | joint_pos             |    -0.7 |
+|   12  | feet_air_time         |     0.0 |
+|   13  | air_time_variance     |     0.0 |
+|   14  | feet_slide            |    -0.1 |
+|   15  | undesired_contacts    |      -1 |
++-------+-----------------------+---------+
+
+[INFO] Curriculum Manager:  <CurriculumManager> contains 0 active terms.
++----------------------+
+| Active Curriculum Terms |
++-----------+----------+
+|   Index   | Name     |
++-----------+----------+
++-----------+----------+
+
+[INFO]: Completed setting up the environment...
+[diag] env created, device=cuda:0
+[diag] act_dim=12
+[diag] reset()...
+Setting seed: 0
+[diag] reset done; starting random-action rollout
+  step 100/1000
+  step 200/1000
+  step 300/1000
+  step 400/1000
+  step 500/1000
+  step 600/1000
+  step 700/1000
+  step 800/1000
+  step 900/1000
+  step 1000/1000
+[diag] rollout complete; computing table BEFORE close
+
+mean power : 99.988 W
+mean |v_x| : 0.0963 m/s
+mean |w_z| : 0.3474 rad/s
+
+sigma_en_x  mean(R_en)  std(R_en)      min      max  gradient regime
+--------------------------------------------------------------------------------
+        50       0.014      0.046    0.000    1.000  too strong (saturated near 0)
+       100       0.064      0.098    0.000    1.000  strong
+       250       0.241      0.191    0.000    1.000  strong
+       500       0.438      0.224    0.000    1.000  useful gradient
+      1000       0.628      0.207    0.000    1.000  useful gradient
+      2000       0.776      0.163    0.000    1.000  weak gradient
+      5000       0.896      0.099    0.000    1.000  weak gradient
+[diag] table written to /home/drl-68/curriculum_training/src/results/phase0_table.txt
+[diag] closing env...
+[diag] env closed cleanly
+[Warning] [simulation_app.simulation_app] Modules: ['omni.kit_app'] were loaded before SimulationApp was started and might not be loaded correctly.
+[Warning] [simulation_app.simulation_app] Please check to make sure no extra omniverse or pxr modules are imported before the call to SimulationApp(...)
+Loading user config located at: '/home/drl-68/miniconda3/envs/env_isaaclab/lib/python3.10/site-packages/omni/data/Kit/Isaac-Sim/4.5/user.config.json'
+[Info] [carb] Logging to file: /home/drl-68/miniconda3/envs/env_isaaclab/lib/python3.10/site-packages/omni/logs/Kit/Isaac-Sim/4.5/kit_20260504_215655.log
+2026-05-04 14:56:55 [0ms] [Warning] [omni.kit.app.plugin] No crash reporter present, dumps uploading isn't available.
+2026-05-04 14:56:55 [99ms] [Warning] [omni.usd_config.extension] Enable omni.materialx.libs extension to use MaterialX
+2026-05-04 14:56:55 [355ms] [Warning] [omni.datastore] OmniHub is inaccessible
+2026-05-04 14:56:55 [431ms] [Warning] [omni.isaac.dynamic_control] omni.isaac.dynamic_control is deprecated as of Isaac Sim 4.5. No action is needed from end-users.
+
+|---------------------------------------------------------------------------------------------|
+| Driver Version: 580.126.09    | Graphics API: Vulkan
+|=============================================================================================|
+| GPU | Name                             | Active | LDA | GPU Memory | Vendor-ID | LUID       |
+|     |                                  |        |     |            | Device-ID | UUID       |
+|     |                                  |        |     |            | Bus-ID    |            |
+|---------------------------------------------------------------------------------------------|
+| 0   | NVIDIA GeForce RTX 4070 Ti SUPER | Yes: 0 |     | 16376   MB | 10de      | 0          |
+|     |                                  |        |     |            | 2705      | 48b019b0.. |
+|     |                                  |        |     |            | 1         |            |
+|=============================================================================================|
+| OS: 22.04.5 LTS (Jammy Jellyfish) ubuntu, Version: 22.04.5, Kernel: 6.8.0-110-generic
+| XServer Vendor: The X.Org Foundation, XServer Version: 12101004 (1.21.1.4)
+| Processor: Intel(R) Core(TM) i5-14400F
+| Bare Metal Cores: 10 | Bare Metal Logical Cores: 20
+| Available Cores:  16 
+|---------------------------------------------------------------------------------------------|
+| Total Memory (MB): 31932 | Free Memory: 22129
+| Total Page/Swap (MB): 2047 | Free Page/Swap: 2046
+|---------------------------------------------------------------------------------------------|
+2026-05-04 14:56:58 [3,663ms] [Warning] [gpu.foundation.plugin] IOMMU is enabled.
+2026-05-04 14:56:58 [3,862ms] [Warning] [isaaclab.envs.manager_based_env] Seed not set for the environment. The environment creation may not be deterministic.
+2026-05-04 14:56:59 [3,973ms] [Warning] [isaaclab.terrains.terrain_importer] Visual material specified for ground plane but no diffuse color found. Using default color: (0.0, 0.0, 0.0)

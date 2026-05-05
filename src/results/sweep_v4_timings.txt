@@ -1,0 +1,37 @@
+===== SWEEP_V4 2026-05-05 08:04:10 σ=(250,500,1000) =====
+[TRAIN_START] run=1  at 2026-05-05 08:04:10
+[TRAIN_STOP]  run=1  elapsed=1949s (32.4min)  rc=0
+[EVAL_START]  run=1  at 2026-05-05 08:36:39
+[EVAL_STOP]   run=1  elapsed=98s  rc=0
+[TRAIN_START] run=2  at 2026-05-05 08:38:18
+[TRAIN_STOP]  run=2  elapsed=1930s (32.1min)  rc=0
+[EVAL_START]  run=2  at 2026-05-05 09:10:28
+[EVAL_STOP]   run=2  elapsed=97s  rc=0
+[TRAIN_START] run=3  at 2026-05-05 09:12:06
+[TRAIN_STOP]  run=3  elapsed=2000s (33.3min)  rc=0
+[EVAL_START]  run=3  at 2026-05-05 09:45:26
+[EVAL_STOP]   run=3  elapsed=100s  rc=0
+[TRAIN_START] run=4  at 2026-05-05 09:47:08
+[TRAIN_STOP]  run=4  elapsed=2021s (33.6min)  rc=0
+[EVAL_START]  run=4  at 2026-05-05 10:20:49
+[EVAL_STOP]   run=4  elapsed=104s  rc=0
+[TRAIN_START] run=5  at 2026-05-05 10:22:34
+[TRAIN_STOP]  run=5  elapsed=2022s (33.7min)  rc=0
+[EVAL_START]  run=5  at 2026-05-05 10:56:16
+[EVAL_STOP]   run=5  elapsed=102s  rc=0
+[TRAIN_START] run=6  at 2026-05-05 10:57:59
+[TRAIN_STOP]  run=6  elapsed=2024s (33.7min)  rc=0
+[EVAL_START]  run=6  at 2026-05-05 11:31:43
+[EVAL_STOP]   run=6  elapsed=99s  rc=0
+[TRAIN_START] run=7  at 2026-05-05 11:33:23
+[TRAIN_STOP]  run=7  elapsed=2030s (33.8min)  rc=0
+[EVAL_START]  run=7  at 2026-05-05 12:07:13
+[EVAL_STOP]   run=7  elapsed=101s  rc=0
+[TRAIN_START] run=8  at 2026-05-05 12:08:55
+[TRAIN_STOP]  run=8  elapsed=2039s (33.9min)  rc=0
+[EVAL_START]  run=8  at 2026-05-05 12:42:54
+[EVAL_STOP]   run=8  elapsed=102s  rc=0
+[TRAIN_START] run=9  at 2026-05-05 12:44:37
+[TRAIN_STOP]  run=9  elapsed=2056s (34.2min)  rc=0
+[EVAL_START]  run=9  at 2026-05-05 13:18:53
+[EVAL_STOP]   run=9  elapsed=102s  rc=0

@@ -14,7 +14,6 @@
 #   MAX_ITERATIONS=3000
 #   NUM_ENVS=4096
 #   ROLLOUTS_PER_BIN=100
-#   MAX_WALLCLOCK_MIN=45
 set -uo pipefail
 trap '' HUP
 
@@ -29,7 +28,6 @@ SIGMA_HIGH="${3:?Usage: bash src/scripts/run_sweep_v4.sh SIGMA_LOW SIGMA_MID SIG
 MAX_ITERATIONS="${MAX_ITERATIONS:-3000}"
 NUM_ENVS="${NUM_ENVS:-4096}"
 ROLLOUTS_PER_BIN="${ROLLOUTS_PER_BIN:-100}"
-MAX_WALLCLOCK_MIN="${MAX_WALLCLOCK_MIN:-45}"
 RESUME="${RESUME:-0}"
 
 RESULTS_DIR="$PROJECT_ROOT/src/results"
@@ -41,7 +39,7 @@ mkdir -p "$RESULTS_DIR"
 exec > >(tee -a "$SWEEP_LOG") 2>&1
 echo "=== run_sweep_v4 starting at $(date) — output captured to $SWEEP_LOG ==="
 echo "=== σ_low=$SIGMA_LOW  σ_mid=$SIGMA_MID  σ_high=$SIGMA_HIGH ==="
-echo "=== MAX_ITERATIONS=$MAX_ITERATIONS  NUM_ENVS=$NUM_ENVS  MAX_WALLCLOCK_MIN=$MAX_WALLCLOCK_MIN ==="
+echo "=== MAX_ITERATIONS=$MAX_ITERATIONS  NUM_ENVS=$NUM_ENVS ==="
 
 : > "$TIMING_LOG"
 echo "===== SWEEP_V4 $(date '+%Y-%m-%d %H:%M:%S') σ=($SIGMA_LOW,$SIGMA_MID,$SIGMA_HIGH) =====" >> "$TIMING_LOG"
@@ -112,14 +110,6 @@ for run_id in 1 2 3 4 5 6 7 8 9; do
             --alpha-en "$alpha_en" \
             --wall-sec "$train_elapsed" || true
         continue
-    fi
-
-    # wallclock guard
-    if [ "$train_elapsed" -gt $((MAX_WALLCLOCK_MIN * 60)) ]; then
-        echo "ABORT: run $run_id took ${train_min}min > ${MAX_WALLCLOCK_MIN}min threshold." >&2
-        echo "Diagnose throughput before continuing." >&2
-        echo "[ABORT] run=$run_id elapsed=${train_min}min > ${MAX_WALLCLOCK_MIN}min" >> "$TIMING_LOG"
-        break
     fi
 
     # find checkpoint (newest dir, newest model_*.pt inside)

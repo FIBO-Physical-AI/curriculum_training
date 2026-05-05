@@ -1,10 +1,26 @@
 cond             bin  reward_mean  reward_std   slope/iter  status
 ------------------------------------------------------------------------
-uniform            0        0.190       0.007     -0.00002  CONVERGED suboptimal
-uniform            1        0.196       0.005     -0.00000  CONVERGED suboptimal
-uniform            2        0.194       0.007      0.00001  CONVERGED suboptimal
-uniform            3        0.193       0.005     -0.00001  CONVERGED suboptimal
-uniform            4        0.195       0.005      0.00001  CONVERGED suboptimal
-uniform            5        0.194       0.005      0.00001  CONVERGED suboptimal
-uniform            6        0.194       0.005      0.00002  CONVERGED suboptimal
-uniform            7        0.191       0.006      0.00000  CONVERGED suboptimal
+uniform            0        0.812       0.007     -0.00001  CONVERGED suboptimal
+task_specific      0        0.850       0.007     -0.00001  CONVERGED suboptimal
+teacher            0        0.915       0.003     -0.00000  CONVERGED suboptimal
+uniform            1        0.820       0.006      0.00000  CONVERGED suboptimal
+task_specific      1        0.848       0.008      0.00002  CONVERGED suboptimal
+teacher            1        0.915       0.002      0.00001  CONVERGED suboptimal
+uniform            2        0.814       0.007     -0.00001  CONVERGED suboptimal
+task_specific      2        0.842       0.006      0.00000  CONVERGED suboptimal
+teacher            2        0.916       0.002      0.00000  CONVERGED suboptimal
+uniform            3        0.820       0.007     -0.00003  CONVERGED suboptimal
+task_specific      3        0.848       0.007     -0.00001  CONVERGED suboptimal
+teacher            3        0.914       0.003      0.00000  CONVERGED suboptimal
+uniform            4        0.815       0.007     -0.00000  CONVERGED suboptimal
+task_specific      4        0.841       0.008     -0.00003  CONVERGED suboptimal
+teacher            4        0.915       0.002      0.00001  CONVERGED suboptimal
+uniform            5        0.812       0.008      0.00002  CONVERGED suboptimal
+task_specific      5        0.843       0.005     -0.00000  CONVERGED suboptimal
+teacher            5        0.915       0.002      0.00000  CONVERGED suboptimal
+uniform            6        0.814       0.007      0.00002  CONVERGED suboptimal
+task_specific      6        0.846       0.005      0.00001  CONVERGED suboptimal
+teacher            6        0.915       0.002      0.00000  CONVERGED suboptimal
+uniform            7        0.809       0.007     -0.00001  CONVERGED suboptimal
+task_specific      7        0.842       0.008      0.00002  CONVERGED suboptimal
+teacher            7        0.912       0.003     -0.00000  CONVERGED suboptimal

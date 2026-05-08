@@ -16,6 +16,8 @@ _csv_handle = None
 
 _per_bin_reward_sum: torch.Tensor | None = None
 _per_bin_reward_count: torch.Tensor | None = None
+_per_bin_ren_sum: torch.Tensor | None = None
+_per_bin_ren_count: torch.Tensor | None = None
 
 
 def ang_vel_z_l2(env: "ManagerBasedRLEnv", asset_cfg=None) -> torch.Tensor:
@@ -71,17 +73,18 @@ def _resolve_csv_path(env: "ManagerBasedRLEnv") -> Path:
     return _csv_path
 
 
-def _append_rows(env: "ManagerBasedRLEnv", step: int, weights, per_bin_reward, counts) -> None:
+def _append_rows(env: "ManagerBasedRLEnv", step: int, weights, per_bin_reward, counts, per_bin_ren) -> None:
     global _csv_handle
     path = _resolve_csv_path(env)
     if _csv_handle is None:
         new_file = not path.exists() or path.stat().st_size == 0
         _csv_handle = open(path, "a", buffering=1)
         if new_file:
-            _csv_handle.write("step,bin_idx,weight,mean_reward,n_samples\n")
+            _csv_handle.write("step,bin_idx,weight,mean_reward,n_samples,r_lin,r_en\n")
     for b in range(len(weights)):
         _csv_handle.write(
-            f"{step},{b},{float(weights[b]):.6f},{float(per_bin_reward[b]):.6f},{int(counts[b])}\n"
+            f"{step},{b},{float(weights[b]):.6f},{float(per_bin_reward[b]):.6f},{int(counts[b])},"
+            f"{float(per_bin_reward[b]):.6f},{float(per_bin_ren[b]):.6f}\n"
         )
 
 
@@ -101,12 +104,14 @@ def velocity_curriculum_step(
     command_name: str = "base_velocity",
     reward_term_name: str = "track_lin_vel_xy",
 ) -> torch.Tensor:
-    global _per_bin_reward_sum, _per_bin_reward_count
+    global _per_bin_reward_sum, _per_bin_reward_count, _per_bin_ren_sum, _per_bin_ren_count
     cmd = env.command_manager.get_term(command_name)
 
     if _per_bin_reward_sum is None or _per_bin_reward_sum.shape[0] != cmd.num_bins:
         _per_bin_reward_sum = torch.zeros(cmd.num_bins, device=env.device)
         _per_bin_reward_count = torch.zeros(cmd.num_bins, dtype=torch.long, device=env.device)
+        _per_bin_ren_sum = torch.zeros(cmd.num_bins, device=env.device)
+        _per_bin_ren_count = torch.zeros(cmd.num_bins, dtype=torch.long, device=env.device)
 
     if not isinstance(env_ids, torch.Tensor):
         env_ids_t = torch.as_tensor(list(env_ids), dtype=torch.long, device=env.device)
@@ -124,6 +129,7 @@ def velocity_curriculum_step(
         )
         bins = cmd.env_bin_idx[env_ids_t]
         standing = getattr(cmd, "is_standing_env", None)
+        keep = None
         if standing is not None:
             keep = ~standing[env_ids_t]
             per_env = per_env[keep]
@@ -133,6 +139,22 @@ def velocity_curriculum_step(
             _per_bin_reward_sum.scatter_add_(0, bins, per_env)
             _per_bin_reward_count.scatter_add_(0, bins, torch.ones_like(bins))
 
+        ren_sums_all = env.reward_manager._episode_sums.get("energy")
+        if ren_sums_all is not None:
+            try:
+                ren_cfg = env.reward_manager.get_term_cfg("energy")
+                ren_sums = ren_sums_all[env_ids_t]
+                per_env_ren = (ren_sums / ep_len / max(float(ren_cfg.weight), 1e-6)).clamp(0.0, 1.0)
+                bins_ren = cmd.env_bin_idx[env_ids_t]
+                if keep is not None:
+                    per_env_ren = per_env_ren[keep]
+                    bins_ren = bins_ren[keep]
+                if per_env_ren.numel() > 0:
+                    _per_bin_ren_sum.scatter_add_(0, bins_ren, per_env_ren)
+                    _per_bin_ren_count.scatter_add_(0, bins_ren, torch.ones_like(bins_ren))
+            except Exception:
+                pass
+
     steps_per_iter = _get_steps_per_ppo_iteration(env)
     if env.common_step_counter == 0 or env.common_step_counter % steps_per_iter != 0:
         return cmd.weights.max()
@@ -141,8 +163,17 @@ def velocity_curriculum_step(
     sums = _per_bin_reward_sum
     per_bin = torch.where(counts > 0, sums / counts.clamp(min=1).float(), torch.zeros_like(sums))
 
+    ren_counts = _per_bin_ren_count
+    ren_sums_b = _per_bin_ren_sum
+    per_bin_ren = torch.where(
+        ren_counts > 0,
+        ren_sums_b / ren_counts.clamp(min=1).float(),
+        torch.zeros_like(ren_sums_b),
+    )
+
     per_bin_np = per_bin.detach().cpu().numpy()
     counts_np = counts.detach().cpu().numpy()
+    per_bin_ren_np = per_bin_ren.detach().cpu().numpy()
 
     try:
         cmd.curriculum.update(per_bin_np, int(env.common_step_counter), bin_counts=counts_np)
@@ -151,9 +182,11 @@ def velocity_curriculum_step(
     cmd.sync_weights_from_curriculum()
 
     weights_np = cmd.weights.detach().cpu().numpy()
-    _append_rows(env, int(env.common_step_counter), weights_np, per_bin_np, counts_np)
+    _append_rows(env, int(env.common_step_counter), weights_np, per_bin_np, counts_np, per_bin_ren_np)
 
     _per_bin_reward_sum.zero_()
     _per_bin_reward_count.zero_()
+    _per_bin_ren_sum.zero_()
+    _per_bin_ren_count.zero_()
 
     return cmd.weights.max()

@@ -12,9 +12,22 @@ from curriculum_rl.figures._util import (
     CONDITION_LABEL,
     CONDITION_ORDER,
     aggregate_runs_by_condition,
+    aggregate_ren_by_condition,
     apply_style,
     find_runs,
 )
+
+_SIGNAL_YLABEL = {
+    "mean_reward": "per-bin mean return",
+    "r_lin": "per-bin r_lin (velocity tracking)",
+    "r_en": "per-bin r_en (energy reward)",
+}
+
+_SIGNAL_TITLE = {
+    "mean_reward": "Per-bin learning curves",
+    "r_lin": "Per-bin r_lin learning curves",
+    "r_en": "Per-bin r_en learning curves",
+}
 
 
 def _rolling_mean(y: np.ndarray, window: int) -> np.ndarray:
@@ -39,11 +52,18 @@ def plot_learning_curves(
     num_bins: int = 8,
     num_steps_per_env: int = 24,
     smooth_window: int = 20,
+    signal: str = "mean_reward",
 ) -> None:
     runs = find_runs(logs_root)
     if not runs:
         raise FileNotFoundError(f"no curriculum.csv files under {logs_root}")
-    by_cond = aggregate_runs_by_condition(runs, num_bins=num_bins)
+
+    if signal == "r_en":
+        by_cond_ren = aggregate_ren_by_condition(runs, num_bins=num_bins)
+        by_cond = {cond: (steps, None, r_en) for cond, (steps, r_en) in by_cond_ren.items()}
+    else:
+        by_cond = aggregate_runs_by_condition(runs, num_bins=num_bins, signal=signal)
+
     apply_style()
     plt.rcParams["figure.constrained_layout.use"] = False
 
@@ -52,6 +72,7 @@ def plot_learning_curves(
     fig, axes = plt.subplots(nrows, ncols, figsize=(3.6 * ncols, 2.7 * nrows), sharex=True, sharey=True)
     axes = np.atleast_2d(axes).flatten()
 
+    bin_width = 4.0 / num_bins
     for b in range(num_bins):
         ax = axes[b]
         for cond in CONDITION_ORDER:
@@ -63,7 +84,7 @@ def plot_learning_curves(
             smoothed = _rolling_mean(raw, smooth_window)
             ax.plot(it, raw, color=CONDITION_COLOR[cond], lw=0.8, alpha=0.22)
             ax.plot(it, smoothed, label=CONDITION_LABEL[cond], color=CONDITION_COLOR[cond], lw=2.2, alpha=0.98)
-        ax.set_title(f"{b * 0.5:.1f} - {(b + 1) * 0.5:.1f} m/s", fontsize=11, color="#111827", pad=6)
+        ax.set_title(f"{b * bin_width:.1f} - {(b + 1) * bin_width:.1f} m/s", fontsize=11, color="#111827", pad=6)
         ax.set_ylim(-0.03, 1.05)
         ax.set_yticks([0, 0.25, 0.5, 0.75, 1.0])
         ax.tick_params(length=3)
@@ -82,8 +103,8 @@ def plot_learning_curves(
         handlelength=2.2,
     )
     fig.text(0.5, 0.09, "PPO iteration", ha="center", va="center", fontsize=12)
-    fig.text(0.01, 0.54, "per-bin mean return", ha="left", va="center", rotation="vertical", fontsize=12)
-    fig.suptitle("Per-bin learning curves", fontsize=14, fontweight="bold", y=0.96)
+    fig.text(0.01, 0.54, _SIGNAL_YLABEL.get(signal, signal), ha="left", va="center", rotation="vertical", fontsize=12)
+    fig.suptitle(_SIGNAL_TITLE.get(signal, "Per-bin learning curves"), fontsize=14, fontweight="bold", y=0.96)
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_path)
@@ -96,8 +117,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out", type=Path, default=Path("src/results/figures/learning_curves.png"))
     parser.add_argument("--num-bins", type=int, default=8)
     parser.add_argument("--smooth-window", type=int, default=20)
+    parser.add_argument("--signal", default="mean_reward", choices=["mean_reward", "r_lin", "r_en"])
     args = parser.parse_args(argv)
-    plot_learning_curves(args.logs_root, args.out, num_bins=args.num_bins, smooth_window=args.smooth_window)
+    plot_learning_curves(
+        args.logs_root, args.out,
+        num_bins=args.num_bins,
+        smooth_window=args.smooth_window,
+        signal=args.signal,
+    )
     print(f"wrote {args.out}")
     return 0
 

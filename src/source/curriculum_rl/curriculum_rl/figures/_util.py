@@ -99,38 +99,63 @@ def read_curriculum_csv(csv_path: Path) -> dict[str, np.ndarray]:
         for row in reader:
             rows.append(row)
     if not rows:
-        return {"step": np.empty(0), "bin_idx": np.empty(0), "weight": np.empty(0), "mean_reward": np.empty(0)}
+        return {
+            "step": np.empty(0), "bin_idx": np.empty(0),
+            "weight": np.empty(0), "mean_reward": np.empty(0),
+            "r_lin": np.empty(0), "r_en": np.empty(0),
+        }
+    has_r_lin = "r_lin" in rows[0]
+    has_r_en = "r_en" in rows[0]
+    mean_reward = np.array([float(r["mean_reward"]) for r in rows])
     return {
         "step": np.array([int(r["step"]) for r in rows]),
         "bin_idx": np.array([int(r["bin_idx"]) for r in rows]),
         "weight": np.array([float(r["weight"]) for r in rows]),
-        "mean_reward": np.array([float(r["mean_reward"]) for r in rows]),
+        "mean_reward": mean_reward,
+        "r_lin": np.array([float(r["r_lin"]) for r in rows]) if has_r_lin else mean_reward.copy(),
+        "r_en": np.array([float(r["r_en"]) for r in rows]) if has_r_en else np.full(len(rows), np.nan),
     }
 
 
-def reshape_to_grid(data: dict[str, np.ndarray], num_bins: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+def reshape_to_grid(
+    data: dict[str, np.ndarray], num_bins: int, signal: str = "mean_reward"
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     steps = np.sort(np.unique(data["step"]))
     weights = np.full((len(steps), num_bins), np.nan)
     rewards = np.full((len(steps), num_bins), np.nan)
     step_idx = {s: i for i, s in enumerate(steps)}
+    reward_key = signal if signal in data else "mean_reward"
     for k in range(len(data["step"])):
         i = step_idx[int(data["step"][k])]
         b = int(data["bin_idx"][k])
         if b < num_bins:
             weights[i, b] = data["weight"][k]
-            rewards[i, b] = data["mean_reward"][k]
+            rewards[i, b] = data[reward_key][k]
     return steps, weights, rewards
 
 
+def reshape_ren_to_grid(data: dict[str, np.ndarray], num_bins: int) -> tuple[np.ndarray, np.ndarray]:
+    steps = np.sort(np.unique(data["step"]))
+    r_en = np.full((len(steps), num_bins), np.nan)
+    step_idx = {s: i for i, s in enumerate(steps)}
+    src = data.get("r_en", np.full(len(data["step"]), np.nan))
+    for k in range(len(data["step"])):
+        i = step_idx[int(data["step"][k])]
+        b = int(data["bin_idx"][k])
+        if b < num_bins:
+            r_en[i, b] = src[k]
+    return steps, r_en
+
+
 def aggregate_runs_by_condition(
-    runs: list[tuple[str, Path, Path]], num_bins: int
+    runs: list[tuple[str, Path, Path]], num_bins: int, signal: str = "mean_reward"
 ) -> dict[str, tuple[np.ndarray, np.ndarray, np.ndarray]]:
     by_cond: dict[str, list[tuple[np.ndarray, np.ndarray, np.ndarray]]] = {}
     for cond, _ts, csv_path in runs:
         data = read_curriculum_csv(csv_path)
         if data["step"].size == 0:
             continue
-        by_cond.setdefault(cond, []).append(reshape_to_grid(data, num_bins))
+        by_cond.setdefault(cond, []).append(reshape_to_grid(data, num_bins, signal=signal))
 
     out: dict[str, tuple[np.ndarray, np.ndarray, np.ndarray]] = {}
     for cond, trios in by_cond.items():
@@ -142,4 +167,26 @@ def aggregate_runs_by_condition(
         w_stack = np.stack([t[1][:n] for t in trios], axis=0)
         r_stack = np.stack([t[2][:n] for t in trios], axis=0)
         out[cond] = (common_steps, np.nanmean(w_stack, axis=0), np.nanmean(r_stack, axis=0))
+    return out
+
+
+def aggregate_ren_by_condition(
+    runs: list[tuple[str, Path, Path]], num_bins: int
+) -> dict[str, tuple[np.ndarray, np.ndarray]]:
+    by_cond: dict[str, list[tuple[np.ndarray, np.ndarray]]] = {}
+    for cond, _ts, csv_path in runs:
+        data = read_curriculum_csv(csv_path)
+        if data["step"].size == 0:
+            continue
+        by_cond.setdefault(cond, []).append(reshape_ren_to_grid(data, num_bins))
+
+    out: dict[str, tuple[np.ndarray, np.ndarray]] = {}
+    for cond, pairs in by_cond.items():
+        common_steps = pairs[0][0]
+        for steps, _ in pairs[1:]:
+            n = min(len(common_steps), len(steps))
+            common_steps = common_steps[:n]
+        n = len(common_steps)
+        ren_stack = np.stack([p[1][:n] for p in pairs], axis=0)
+        out[cond] = (common_steps, np.nanmean(ren_stack, axis=0))
     return out

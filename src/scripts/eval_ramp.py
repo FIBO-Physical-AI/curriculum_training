@@ -1,0 +1,191 @@
+from __future__ import annotations
+
+import argparse
+import os
+import sys
+from pathlib import Path
+
+import numpy as np
+
+
+CONDITION_TO_TASK = {
+    "uniform": "Curriculum-Go2-Velocity-Uniform",
+    "task_specific": "Curriculum-Go2-Velocity-TaskSpec",
+    "teacher": "Curriculum-Go2-Velocity-Teacher",
+}
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def build_argparser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--condition", default="teacher", choices=list(CONDITION_TO_TASK.keys()))
+    parser.add_argument("--seed", type=int, default=2)
+    parser.add_argument("--checkpoint", type=Path, required=True)
+    parser.add_argument("--v-start", type=float, default=0.0)
+    parser.add_argument("--v-end", type=float, default=4.0)
+    parser.add_argument("--duration", type=float, default=30.0, help="ramp duration in seconds")
+    parser.add_argument("--out", type=Path, default=None,
+                        help="output npz path; defaults to src/results/ramp_<condition>_seed<N>.npz")
+    parser.add_argument("--video", action="store_true",
+                        help="record a video of the ramp rollout")
+    parser.add_argument("--video-length", type=int, default=0,
+                        help="max frames to record (0 = full duration)")
+    return parser
+
+
+def run(args: argparse.Namespace) -> int:
+    from isaaclab.app import AppLauncher
+
+    video_steps = args.video_length if args.video_length > 0 else int(args.duration * 50 + 200)
+
+    app_cfg = argparse.Namespace(
+        headless=True,
+        enable_cameras=args.video,
+        device="cuda:0",
+        num_gpus=1,
+        experience="",
+        renderer="RaytracedLighting",
+        livestream=-1,
+        kit_args="",
+    )
+    if args.video:
+        app_cfg.video = 1
+        app_cfg.video_length = video_steps
+        app_cfg.video_interval = 1
+
+    app = AppLauncher(app_cfg).app
+
+    import torch
+    import gymnasium as gym
+    from rsl_rl.runners import OnPolicyRunner
+
+    import isaaclab_tasks  # noqa: F401
+    from isaaclab.utils.assets import retrieve_file_path
+    from isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlVecEnvWrapper
+
+    import curriculum_rl  # noqa: F401
+    from unitree_rl_lab.tasks.locomotion.agents.rsl_rl_ppo_cfg import BasePPORunnerCfg
+    from unitree_rl_lab.utils.parser_cfg import parse_env_cfg
+
+    task_id = CONDITION_TO_TASK[args.condition]
+
+    env_cfg = parse_env_cfg(
+        task_id,
+        device=app_cfg.device,
+        num_envs=1,
+        use_fabric=True,
+        entry_point_key="play_env_cfg_entry_point",
+    )
+    env = gym.make(task_id, cfg=env_cfg)
+
+    if args.video:
+        video_dir = args.out.parent / f"ramp_{args.condition}_seed{args.seed}_video"
+        video_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            env = gym.wrappers.RecordVideo(
+                env,
+                video_folder=str(video_dir),
+                name_prefix=f"ramp_{args.condition}_seed{args.seed}",
+                episode_trigger=lambda ep: True,
+                disable_logger=True,
+            )
+            print(f"[eval_ramp] video -> {video_dir}")
+        except Exception as e:
+            print(f"[eval_ramp] WARN: RecordVideo failed ({e}), continuing without video")
+
+    env = RslRlVecEnvWrapper(env, clip_actions=None)
+
+    agent_cfg: RslRlOnPolicyRunnerCfg = BasePPORunnerCfg()
+    runner = OnPolicyRunner(env, agent_cfg.to_dict(), log_dir=None, device=agent_cfg.device)
+    runner.load(str(retrieve_file_path(str(args.checkpoint))))
+    policy = runner.get_inference_policy(device=env.unwrapped.device)
+
+    sim_dt = float(env.unwrapped.step_dt)
+    total_steps = int(args.duration / sim_dt)
+
+    contact_sensor = env.unwrapped.scene["contact_forces"]
+    foot_indices, foot_names = contact_sensor.find_bodies(".*_foot")
+    foot_indices_t = torch.tensor(foot_indices, device=env.unwrapped.device, dtype=torch.long)
+    n_feet = len(foot_indices)
+
+    t_arr = np.zeros(total_steps, dtype=np.float32)
+    vcmd_arr = np.zeros(total_steps, dtype=np.float32)
+    vx_arr = np.zeros(total_steps, dtype=np.float32)
+    vy_arr = np.zeros(total_steps, dtype=np.float32)
+    contact_arr = np.zeros((total_steps, n_feet), dtype=np.bool_)
+    force_arr = np.zeros((total_steps, n_feet), dtype=np.float32)
+
+    reset_result = env.reset()
+    obs = reset_result[0] if isinstance(reset_result, tuple) else reset_result
+
+    cmd_term = env.unwrapped.command_manager.get_term("base_velocity")
+
+    for step in range(total_steps):
+        t = step * sim_dt
+        frac = t / max(args.duration, 1e-6)
+        v_cmd = args.v_start + frac * (args.v_end - args.v_start)
+
+        cmd_term.vel_command_b[:, 0] = v_cmd
+        cmd_term.vel_command_b[:, 1] = 0.0
+        cmd_term.vel_command_b[:, 2] = 0.0
+
+        with torch.inference_mode():
+            actions = policy(obs)
+        obs, _r, dones, _info = env.step(actions)
+
+        cmd_term.vel_command_b[:, 0] = v_cmd
+        cmd_term.vel_command_b[:, 1] = 0.0
+        cmd_term.vel_command_b[:, 2] = 0.0
+
+        robot_data = env.unwrapped.scene["robot"].data
+        v_b = robot_data.root_lin_vel_b[0]
+
+        forces = contact_sensor.data.net_forces_w[:, foot_indices_t, :].norm(dim=-1)
+        in_contact = forces > 1.0
+
+        t_arr[step] = t
+        vcmd_arr[step] = v_cmd
+        vx_arr[step] = float(v_b[0].item())
+        vy_arr[step] = float(v_b[1].item())
+        contact_arr[step] = in_contact[0].detach().cpu().numpy()
+        force_arr[step] = forces[0].detach().cpu().numpy()
+
+        if bool(dones[0].item()):
+            reset_result = env.reset()
+            obs = reset_result[0] if isinstance(reset_result, tuple) else reset_result
+            cmd_term.vel_command_b[:, 0] = v_cmd
+            cmd_term.vel_command_b[:, 1] = 0.0
+            cmd_term.vel_command_b[:, 2] = 0.0
+
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(
+        str(args.out),
+        t=t_arr,
+        vcmd=vcmd_arr,
+        vx=vx_arr,
+        vy=vy_arr,
+        contact=contact_arr,
+        force=force_arr,
+        sim_dt=np.array(sim_dt, dtype=np.float32),
+        foot_names=np.array(foot_names),
+        condition=np.array(args.condition),
+        seed=np.array(args.seed),
+    )
+    print(f"[eval_ramp] saved {total_steps} steps -> {args.out}")
+
+    env.close()
+    app.close()
+    return 0
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_argparser().parse_args(argv)
+    if args.out is None:
+        args.out = REPO_ROOT / "src" / "results" / f"ramp_{args.condition}_seed{args.seed}.npz"
+    os.chdir(REPO_ROOT / "unitree_rl_lab")
+    return run(args)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

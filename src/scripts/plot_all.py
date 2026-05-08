@@ -18,6 +18,9 @@ from curriculum_rl.figures.plot_convergence import plot_convergence
 from curriculum_rl.figures.plot_survival import plot_survival
 from curriculum_rl.figures.plot_v_actual_vs_cmd import plot_v_actual_vs_cmd
 from curriculum_rl.figures.plot_v_trace_per_bin import plot_v_trace_per_bin
+from curriculum_rl.figures.plot_gait_classification import plot_gait_classification
+from curriculum_rl.figures.plot_grf import plot_grf
+from curriculum_rl.figures.plot_gait_transition import plot_gait_transition
 
 
 def build_argparser() -> argparse.ArgumentParser:
@@ -26,6 +29,7 @@ def build_argparser() -> argparse.ArgumentParser:
     parser.add_argument("--out-dir", type=Path, default=Path("src/results/figures"))
     parser.add_argument("--epte-csv", type=Path, default=Path("src/results/epte_sp.csv"))
     parser.add_argument("--traces-dir", type=Path, default=Path("src/results/eval_traces"))
+    parser.add_argument("--ramps-dir", type=Path, default=Path("src/results"))
     parser.add_argument("--num-bins", type=int, default=8)
     parser.add_argument("--v-max", type=float, default=4.0)
     return parser
@@ -36,7 +40,9 @@ def main(argv: list[str] | None = None) -> int:
     args.out_dir.mkdir(parents=True, exist_ok=True)
 
     tasks = [
-        ("learning_curves.png", lambda p: plot_learning_curves(args.logs_root, p, num_bins=args.num_bins)),
+        ("learning_curves.png", lambda p: plot_learning_curves(args.logs_root, p, num_bins=args.num_bins, signal="mean_reward")),
+        ("learning_curves_rlin.png", lambda p: plot_learning_curves(args.logs_root, p, num_bins=args.num_bins, signal="r_lin")),
+        ("learning_curves_ren.png", lambda p: plot_learning_curves(args.logs_root, p, num_bins=args.num_bins, signal="r_en")),
         ("sampling_heatmap.png", lambda p: plot_sampling_heatmap(args.logs_root, p, num_bins=args.num_bins)),
         ("sampling_heatmap_3d.png", lambda p: plot_sampling_heatmap_3d(args.logs_root, p, num_bins=args.num_bins)),
         ("iterations_to_mastery.png", lambda p: plot_iterations_to_mastery(args.logs_root, p, num_bins=args.num_bins)),
@@ -48,6 +54,9 @@ def main(argv: list[str] | None = None) -> int:
         ("action_rate.png", lambda p: plot_action_rate(args.epte_csv, p, num_bins=args.num_bins, v_max=args.v_max)),
         ("joint_kinematics.png", lambda p: plot_joint_kinematics(args.traces_dir, p, bin_idx=args.num_bins // 2, num_bins=args.num_bins)),
         ("gait_diagram.png", lambda p: plot_gait_diagram(args.traces_dir, p, num_bins=args.num_bins)),
+        ("gait_classification.png", lambda p: plot_gait_classification(args.traces_dir, p, num_bins=args.num_bins)),
+        ("grf.png", lambda p: plot_grf(args.traces_dir, p, num_bins=args.num_bins)),
+        ("gait_transition.png", lambda p: plot_gait_transition(args.ramps_dir, p)),
         ("survival.png", lambda p: plot_survival(args.epte_csv, p, num_bins=args.num_bins)),
         ("convergence.png", lambda p: plot_convergence(args.logs_root, p, num_bins=args.num_bins)),
     ]

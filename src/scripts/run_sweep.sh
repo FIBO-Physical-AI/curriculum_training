@@ -99,6 +99,25 @@ for condition in "${CONDITIONS[@]}"; do
             exit 1
         fi
 
+        echo ""
+        echo "------ RAMP  ${condition} seed=${seed}"
+        ramp_start=$(date +%s)
+        echo "[RAMP_START] ${condition} seed=${seed}  at $(date '+%Y-%m-%d %H:%M:%S')" | tee -a "$TIMING_LOG"
+        ramp_video_flag=""
+        [ "$RECORD_VIDEOS" = "1" ] && ramp_video_flag="--video"
+        python src/scripts/eval_ramp.py \
+            --condition "$condition" \
+            --seed "$seed" \
+            --checkpoint "$ckpt" \
+            $ramp_video_flag
+        ramp_rc=$?
+        ramp_elapsed=$(( $(date +%s) - ramp_start ))
+        printf "[RAMP_STOP]  %s seed=%d  elapsed=%ds  rc=%d\n" "$condition" "$seed" "$ramp_elapsed" "$ramp_rc" \
+            | tee -a "$TIMING_LOG"
+        if [ "$ramp_rc" -ne 0 ]; then
+            echo "WARN: eval_ramp.py returned rc=$ramp_rc for ${condition} seed=${seed} — gait transition plot will be skipped" >&2
+        fi
+
         if [ "$RECORD_VIDEOS" != "1" ]; then
             echo ""
             echo "------ PLAY  ${condition} seed=${seed}  SKIPPED (RECORD_VIDEOS=${RECORD_VIDEOS})"

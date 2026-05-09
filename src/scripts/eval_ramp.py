@@ -46,20 +46,12 @@ def run(args: argparse.Namespace) -> int:
     total_steps_guess = int(total_duration / sim_dt_guess)
     video_steps = args.video_length if args.video_length > 0 else total_steps_guess
 
-    app_cfg = argparse.Namespace(
-        headless=True,
-        enable_cameras=args.video,
-        device="cuda:0",
-        num_gpus=1,
-        experience="",
-        renderer="RaytracedLighting",
-        livestream=-1,
-        kit_args="",
-    )
-    if args.video:
-        app_cfg.video = 1
-        app_cfg.video_length = video_steps
-        app_cfg.video_interval = 1
+    launcher_parser = argparse.ArgumentParser(add_help=False)
+    AppLauncher.add_app_launcher_args(launcher_parser)
+    app_cfg = launcher_parser.parse_args([])
+    app_cfg.headless = True
+    app_cfg.enable_cameras = bool(args.video)
+    app_cfg.device = "cuda:0"
 
     app = AppLauncher(app_cfg).app
 
@@ -218,6 +210,10 @@ def main(argv: list[str] | None = None) -> int:
     args = build_argparser().parse_args(argv)
     if args.out is None:
         args.out = REPO_ROOT / "src" / "results" / f"ramp_{args.condition}_seed{args.seed}.npz"
+    args.out = Path(args.out).resolve()
+    if args.video_dir is not None:
+        args.video_dir = Path(args.video_dir).resolve()
+    args.checkpoint = Path(args.checkpoint).resolve()
     os.chdir(REPO_ROOT / "unitree_rl_lab")
     return run(args)
 

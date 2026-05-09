@@ -7,12 +7,14 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
+import matplotlib.lines as mlines
 import numpy as np
 
 from curriculum_rl.figures._util import apply_style, CONDITION_COLOR, CONDITION_LABEL, CONDITION_ORDER
 from curriculum_rl.figures.plot_gait_classification import classify_gait, GAIT_COLORS, GAIT_NAMES
 
 FOOT_LABELS = ["FL", "FR", "RL", "RR"]
+FOOT_COLORS = ["#dc2626", "#ea580c", "#2563eb", "#059669"]
 
 _RAMP_RE = re.compile(r"ramp_([a-z_]+)_seed(\d+)")
 
@@ -50,6 +52,16 @@ def _merge_runs(gaits: list[str]) -> list[tuple[int, int, str]]:
     return runs
 
 
+def _rolling_mean(x: np.ndarray, window: int) -> np.ndarray:
+    if window <= 1 or len(x) <= window:
+        return x.astype(float)
+    kernel = np.ones(window, dtype=float) / window
+    pad = window // 2
+    padded = np.concatenate([np.full(pad, x[0]), x.astype(float), np.full(pad, x[-1])])
+    smoothed = np.convolve(padded, kernel, mode="valid")
+    return smoothed[: len(x)]
+
+
 def _find_ramps(ramps_dir: Path) -> dict[str, Path]:
     best: dict[str, Path] = {}
     for path in sorted(ramps_dir.glob("ramp_*.npz")):
@@ -74,8 +86,9 @@ def _draw_column(
     vx = z["vx"]
     contact = z["contact"].astype(bool)
     sim_dt = float(z["sim_dt"])
+    has_wz = "wz" in z.files
+    wz = z["wz"] if has_wz else np.zeros_like(vx)
     n_feet = contact.shape[1]
-    n_steps = len(vcmd)
 
     x = vcmd
     x_lo = float(x.min())
@@ -84,17 +97,36 @@ def _draw_column(
     centers_idx, gaits = _classify_windows(contact, sim_dt, window_s=window_s, stride_s=stride_s)
     seen = set(gaits)
 
-    ax_v, ax_g, ax_c = axes
+    ax_v, ax_g, ax_d = axes
 
-    ax_v.plot(x, vcmd, color="#9ca3af", lw=1.5, ls="--", label="$v_{cmd}$")
-    ax_v.plot(x, vx, color="#1f2937", lw=1.8, label="$v_x$")
+    ax_v.plot(x, vcmd, color="#9ca3af", lw=1.6, ls="--", label=r"$v_{cmd}$")
+    ax_v.plot(x, vx, color="#1f2937", lw=1.8, label=r"$v_x$")
     ax_v.set_xlim(x_lo, x_hi)
-    ax_v.set_ylim(min(0.0, float(vx.min()) - 0.3), float(max(vcmd.max(), vx.max())) + 0.3)
+    v_top = float(max(vcmd.max(), vx.max())) + 0.3
+    v_bot = min(0.0, float(vx.min()) - 0.3)
+    ax_v.set_ylim(v_bot, v_top)
     if show_ylabel:
         ax_v.set_ylabel("velocity (m/s)", fontsize=10)
-    ax_v.legend(loc="upper left", frameon=False, fontsize=9)
     ax_v.tick_params(labelbottom=False)
     ax_v.grid(True, alpha=0.25)
+
+    if has_wz:
+        ax_w = ax_v.twinx()
+        ax_w.plot(x, wz, color="#dc2626", lw=1.0, alpha=0.7, label=r"$\omega_z$")
+        wz_max = float(np.max(np.abs(wz))) if len(wz) else 1.0
+        ax_w.set_ylim(-max(wz_max, 0.5) * 1.2, max(wz_max, 0.5) * 1.2)
+        ax_w.tick_params(axis="y", colors="#dc2626", labelsize=8)
+        if not show_ylabel:
+            ax_w.set_ylabel(r"$\omega_z$ (rad/s)", color="#dc2626", fontsize=9)
+        else:
+            ax_w.set_yticklabels([])
+        ax_w.axhline(0, color="#dc2626", lw=0.4, alpha=0.3)
+        lines_v, labels_v = ax_v.get_legend_handles_labels()
+        lines_w, labels_w = ax_w.get_legend_handles_labels()
+        ax_v.legend(lines_v + lines_w, labels_v + labels_w,
+                    loc="upper left", frameon=False, fontsize=9)
+    else:
+        ax_v.legend(loc="upper left", frameon=False, fontsize=9)
 
     runs = _merge_runs(gaits)
     if len(centers_idx):
@@ -102,55 +134,41 @@ def _draw_column(
         for s_idx, e_idx, gait in runs:
             if e_idx <= s_idx:
                 continue
-            v_left = float(v_at_center[s_idx])
-            v_right = float(v_at_center[min(e_idx, len(v_at_center) - 1)])
-            if e_idx >= len(v_at_center):
-                v_right = x_hi
-            if s_idx == 0:
-                v_left = x_lo
+            v_left = float(v_at_center[s_idx]) if s_idx > 0 else x_lo
+            v_right = float(v_at_center[min(e_idx, len(v_at_center) - 1)]) \
+                if e_idx < len(v_at_center) else x_hi
             color = GAIT_COLORS.get(gait, "#9ca3af")
             width = v_right - v_left
             if width <= 0:
                 continue
             ax_g.add_patch(plt.Rectangle((v_left, 0.0), width, 1.0,
-                                         facecolor=color, alpha=0.85, edgecolor="white", lw=0.5))
-            if width > 0.35 * (x_hi - x_lo) * 0.20:
-                ax_g.text(v_left + width / 2.0, 0.5, gait,
-                          ha="center", va="center", fontsize=8.5,
-                          fontweight="bold", color="#111827")
+                                         facecolor=color, alpha=0.9,
+                                         edgecolor="white", lw=0.6))
     ax_g.set_xlim(x_lo, x_hi)
     ax_g.set_ylim(0.0, 1.0)
     ax_g.set_yticks([])
     ax_g.set_xticks([])
     if show_ylabel:
-        ax_g.set_ylabel("gait", fontsize=10, rotation=0, ha="right", va="center", labelpad=20)
+        ax_g.set_ylabel("gait", fontsize=10, rotation=0,
+                        ha="right", va="center", labelpad=12)
 
+    duty_window = max(int(window_s / sim_dt), 1)
     for foot_i in range(min(n_feet, 4)):
-        y_low = (n_feet - 1 - foot_i) - 0.45
-        y_high = (n_feet - 1 - foot_i) + 0.45
-        c = contact[:, foot_i]
-        edges = np.diff(np.concatenate(([False], c, [False])).astype(int))
-        starts = np.where(edges == 1)[0]
-        ends = np.where(edges == -1)[0]
-        for s, e in zip(starts, ends):
-            e = min(e, n_steps - 1)
-            xs = float(x[s])
-            xe = float(x[e])
-            if xe <= xs:
-                continue
-            ax_c.fill_between([xs, xe], y_low, y_high,
-                              color="#111827", lw=0)
-    ax_c.set_xlim(x_lo, x_hi)
-    ax_c.set_ylim(-0.6, n_feet - 0.4)
-    ax_c.set_yticks(range(n_feet))
-    ax_c.set_yticklabels(FOOT_LABELS[:n_feet][::-1], fontsize=9)
-    ax_c.set_xlabel("commanded velocity (m/s)", fontsize=10)
-    ax_c.grid(True, axis="x", alpha=0.20)
+        c = contact[:, foot_i].astype(float)
+        duty = _rolling_mean(c, duty_window)
+        ax_d.plot(x, duty, color=FOOT_COLORS[foot_i], lw=1.4,
+                  label=FOOT_LABELS[foot_i], alpha=0.9)
+    ax_d.set_xlim(x_lo, x_hi)
+    ax_d.set_ylim(0.0, 1.0)
+    ax_d.axhline(0.5, color="#9ca3af", lw=0.6, ls=":")
+    ax_d.axhline(0.75, color="#9ca3af", lw=0.6, ls=":")
     if show_ylabel:
-        for sp in ("top", "right"):
-            ax_c.spines[sp].set_visible(False)
-    else:
-        ax_c.set_yticklabels([])
+        ax_d.set_ylabel("duty factor", fontsize=10)
+    ax_d.set_xlabel("commanded velocity (m/s)", fontsize=10)
+    ax_d.grid(True, alpha=0.25)
+    if show_ylabel:
+        ax_d.legend(loc="lower left", frameon=False, fontsize=8.5,
+                    ncol=4, handlelength=1.2, columnspacing=1.0)
 
     return seen
 
@@ -175,9 +193,9 @@ def plot_gait_transition(
     plt.rcParams["figure.constrained_layout.use"] = False
     fig, all_axes = plt.subplots(
         n_rows, n_cols,
-        figsize=(6.2 * n_cols, 5.2),
+        figsize=(6.5 * n_cols, 5.4),
         sharex="col",
-        gridspec_kw={"height_ratios": [1.6, 0.35, 1.2]},
+        gridspec_kw={"height_ratios": [1.5, 0.30, 1.3]},
     )
     if n_cols == 1:
         all_axes = all_axes.reshape(n_rows, 1)
@@ -193,7 +211,7 @@ def plot_gait_transition(
         all_axes[0, ci].set_title(label, fontsize=12, fontweight="bold", color=color)
 
     legend_patches = [
-        mpatches.Patch(facecolor=GAIT_COLORS[g], label=g, alpha=0.85)
+        mpatches.Patch(facecolor=GAIT_COLORS[g], label=g, alpha=0.9)
         for g in GAIT_NAMES if g in seen_gaits and g in GAIT_COLORS
     ]
     if legend_patches:
@@ -201,15 +219,15 @@ def plot_gait_transition(
             handles=legend_patches,
             loc="lower center",
             frameon=False,
-            fontsize=9.5,
+            fontsize=10,
             ncol=len(legend_patches),
-            bbox_to_anchor=(0.5, -0.01),
+            bbox_to_anchor=(0.5, -0.02),
         )
 
     fig.suptitle("Gait emergence across 0 → 4 m/s ramp + 4 m/s hold",
                  fontsize=13, fontweight="bold", y=0.995)
     fig.subplots_adjust(top=0.92, bottom=0.10, left=0.07, right=0.99,
-                        hspace=0.10, wspace=0.18)
+                        hspace=0.10, wspace=0.20)
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_path, dpi=150, bbox_inches="tight")

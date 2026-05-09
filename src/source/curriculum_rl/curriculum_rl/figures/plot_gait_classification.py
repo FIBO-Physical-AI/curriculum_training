@@ -7,6 +7,7 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
+import matplotlib.lines as mlines
 import numpy as np
 
 from curriculum_rl.figures._util import (
@@ -139,6 +140,27 @@ def classify_gait(contact: np.ndarray) -> tuple[str, float]:
     return "Trotting", conf
 
 
+def hildebrand_metrics(contact: np.ndarray) -> tuple[float, float] | None:
+    """Return (duty_factor_pct, lateral_lag_pct) per Hildebrand convention.
+
+    duty_factor: mean fraction of stride in stance, ×100.
+    lateral_lag: phase offset of FL relative to RL (left-side ipsilateral pair),
+                 in % of stride period.
+    """
+    n_steps, n_feet = contact.shape
+    if n_steps < 20 or n_feet < 4:
+        return None
+    fl, rl = contact[:, 0], contact[:, 2]
+    period = _stride_period(rl)
+    if period < 4.0:
+        return None
+    duty = float(contact.mean()) * 100.0
+    lag = _phase_offset(rl, fl, period) * 100.0
+    if not (0.0 <= duty <= 100.0):
+        return None
+    return duty, lag
+
+
 def _find_traces(traces_dir: Path) -> dict[str, list[Path]]:
     out: dict[str, list[Path]] = {}
     if not traces_dir.is_dir():
@@ -151,36 +173,34 @@ def _find_traces(traces_dir: Path) -> dict[str, list[Path]]:
     return out
 
 
-def _draw_cell(ax, gaits: list[str], confs: list[float]) -> None:
-    if not gaits:
-        ax.text(0.5, 0.5, "n/a", transform=ax.transAxes,
-                ha="center", va="center", color="#9ca3af", fontsize=10)
-        ax.set_xticks([])
-        ax.set_yticks([])
-        for sp in ax.spines.values():
-            sp.set_visible(False)
-        return
+def _draw_hildebrand_background(ax) -> None:
+    regions = [
+        ((25, 75, 25, 50), "#fde68a", "Lateral-sequence\nwalk"),
+        ((25, 75, 50, 75), "#bfdbfe", "Diagonal-sequence\nwalk"),
+        ((75, 100, 0, 100), "#d1d5db", "Stand /\nstatic"),
+        ((25, 50, 40, 60), "#fed7aa", "Trot"),
+        ((25, 50, 0, 15), "#ddd6fe", "Pace"),
+        ((25, 50, 85, 100), "#ddd6fe", "Pace"),
+        ((0, 25, 25, 75), "#fecaca", "Run /\nfly trot"),
+    ]
+    for (x0, x1, y0, y1, color, label) in (
+        (r[0][0], r[0][1], r[0][2], r[0][3], r[1], r[2]) for r in regions
+    ):
+        ax.add_patch(plt.Rectangle((x0, y0), x1 - x0, y1 - y0,
+                                    facecolor=color, edgecolor="none", alpha=0.45))
+        ax.text((x0 + x1) / 2, (y0 + y1) / 2, label,
+                ha="center", va="center", fontsize=8, color="#374151", alpha=0.9)
 
-    counts = Counter(gaits)
-    majority_gait, majority_n = counts.most_common(1)[0]
-    pct = majority_n / len(gaits)
-    mean_conf = float(np.mean([c for g, c in zip(gaits, confs) if g == majority_gait]))
-    color = GAIT_COLORS.get(majority_gait, "#9ca3af")
 
-    ax.set_facecolor(color + "33")
-    ax.set_xlim(0, 1)
-    ax.set_ylim(0, 1)
-    ax.set_xticks([])
-    ax.set_yticks([])
-    for sp in ax.spines.values():
-        sp.set_linewidth(0.6)
-        sp.set_color("#9ca3af")
-
-    ax.text(0.5, 0.62, majority_gait, transform=ax.transAxes,
-            ha="center", va="center", fontsize=11, fontweight="bold", color="#111827")
-    ax.text(0.5, 0.30, f"{pct:.0%}   conf={mean_conf:.2f}",
-            transform=ax.transAxes, ha="center", va="center",
-            fontsize=9, color="#374151")
+def _draw_canonical_targets(ax) -> None:
+    targets = [
+        ("Trot",  35, 50, "x"),
+        ("Pace",  50,  0, "x"),
+        ("Walk",  75, 25, "x"),
+        ("Bound", 35, 50, "+"),
+    ]
+    for name, x, y, marker in targets:
+        ax.plot(x, y, marker=marker, color="#111827", ms=8, mew=1.5, zorder=4)
 
 
 def plot_gait_classification(
@@ -194,27 +214,22 @@ def plot_gait_classification(
 
     conditions = [c for c in CONDITION_ORDER if c in cond_to_files]
     n_cols = len(conditions)
-    n_rows = num_bins
 
     apply_style()
     plt.rcParams["figure.constrained_layout.use"] = False
-    fig, axes = plt.subplots(
-        n_rows, n_cols,
-        figsize=(4.0 * n_cols, 1.3 * n_rows),
-    )
+    fig, axes = plt.subplots(1, n_cols, figsize=(5.0 * n_cols, 5.0), sharey=True)
     if n_cols == 1:
-        axes = axes.reshape(-1, 1)
-    if n_rows == 1:
-        axes = axes.reshape(1, -1)
+        axes = np.array([axes])
 
     bin_width = 4.0 / num_bins
-    seen_gaits: set[str] = set()
+    cmap = plt.get_cmap("viridis")
 
     for ci, cond in enumerate(conditions):
-        files = cond_to_files[cond]
-        all_gaits: list[list[str]] = [[] for _ in range(num_bins)]
-        all_conf: list[list[float]] = [[] for _ in range(num_bins)]
+        ax = axes[ci]
+        _draw_hildebrand_background(ax)
 
+        files = cond_to_files[cond]
+        all_pts: list[tuple[float, float, int]] = []
         for fpath in files:
             z = np.load(fpath)
             for b in range(num_bins):
@@ -223,44 +238,55 @@ def plot_gait_classification(
                     continue
                 contact = z[key]
                 for r in range(contact.shape[0]):
-                    gait, conf = classify_gait(contact[r])
-                    all_gaits[b].append(gait)
-                    all_conf[b].append(conf)
+                    m = hildebrand_metrics(contact[r])
+                    if m is None:
+                        continue
+                    all_pts.append((m[0], m[1], b))
 
-        for b in range(num_bins):
-            ax = axes[b, ci]
-            _draw_cell(ax, all_gaits[b], all_conf[b])
-            seen_gaits.update(all_gaits[b])
+        if all_pts:
+            xs = np.array([p[0] for p in all_pts])
+            ys = np.array([p[1] for p in all_pts])
+            cs = np.array([p[2] for p in all_pts]) / max(num_bins - 1, 1)
+            ax.scatter(xs, ys, c=cs, cmap=cmap, vmin=0, vmax=1,
+                       s=24, alpha=0.55, edgecolors="white", linewidths=0.4, zorder=3)
 
-            if ci == 0:
-                v_center = (b + 0.5) * bin_width
-                ax.set_ylabel(f"bin {b}\nv={v_center:.2f}", fontsize=9)
-            if b == 0:
-                ax.set_title(CONDITION_LABEL[cond], fontsize=11, fontweight="bold",
-                             color=CONDITION_COLOR[cond])
+        _draw_canonical_targets(ax)
 
-    fig.suptitle("Gait Classification per (condition, bin)",
-                 fontsize=13, fontweight="bold", y=0.995)
+        ax.set_xlim(0, 100)
+        ax.set_ylim(0, 100)
+        ax.set_xlabel("duty factor (% stride in stance)", fontsize=10)
+        if ci == 0:
+            ax.set_ylabel("lateral lag (FL − RL, % stride)", fontsize=10)
+        ax.set_title(CONDITION_LABEL.get(cond, cond),
+                     fontsize=12, fontweight="bold",
+                     color=CONDITION_COLOR.get(cond, "#111827"))
+        ax.set_xticks([0, 25, 50, 75, 100])
+        ax.set_yticks([0, 25, 50, 75, 100])
+        ax.grid(True, alpha=0.25, lw=0.5)
+        ax.set_aspect("equal")
 
-    legend_patches = [
-        mpatches.Patch(facecolor=GAIT_COLORS[g], label=g, alpha=0.85)
-        for g in GAIT_NAMES if g in seen_gaits
+    sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=0, vmax=4.0))
+    sm.set_array([])
+    cbar = fig.colorbar(sm, ax=axes.tolist(), location="right",
+                        shrink=0.7, pad=0.02, aspect=22)
+    cbar.set_label("commanded velocity bin centre (m/s)", fontsize=9)
+    cbar.ax.tick_params(labelsize=8)
+
+    target_legend = [
+        mlines.Line2D([], [], color="#111827", marker="x", lw=0, ms=8, mew=1.5,
+                      label="canonical Trot/Pace/Walk"),
+        mlines.Line2D([], [], color="#111827", marker="+", lw=0, ms=8, mew=1.5,
+                      label="canonical Bound"),
     ]
-    if legend_patches:
-        fig.legend(
-            handles=legend_patches,
-            loc="lower center",
-            ncol=len(legend_patches),
-            frameon=False,
-            fontsize=10,
-            bbox_to_anchor=(0.5, 0.005),
-        )
+    fig.legend(handles=target_legend, loc="lower center", frameon=False,
+               ncol=2, fontsize=9, bbox_to_anchor=(0.5, -0.02))
 
-    fig.subplots_adjust(top=0.96, bottom=0.07, left=0.06, right=0.99,
-                        hspace=0.35, wspace=0.12)
+    fig.suptitle("Hildebrand symmetric-gait plot — duty factor vs ipsilateral phase lag",
+                 fontsize=13, fontweight="bold", y=1.0)
+    fig.subplots_adjust(top=0.90, bottom=0.10, left=0.06, right=0.92, wspace=0.10)
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(out_path, dpi=140, bbox_inches="tight")
+    fig.savefig(out_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
 
 

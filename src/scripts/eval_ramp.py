@@ -118,6 +118,7 @@ def run(args: argparse.Namespace) -> int:
     vcmd_arr = np.zeros(total_steps, dtype=np.float32)
     vx_arr = np.zeros(total_steps, dtype=np.float32)
     vy_arr = np.zeros(total_steps, dtype=np.float32)
+    wz_arr = np.zeros(total_steps, dtype=np.float32)
     contact_arr = np.zeros((total_steps, n_feet), dtype=np.bool_)
     force_arr = np.zeros((total_steps, n_feet), dtype=np.float32)
     n_recorded = total_steps
@@ -149,6 +150,7 @@ def run(args: argparse.Namespace) -> int:
 
         robot_data = env.unwrapped.scene["robot"].data
         v_b = robot_data.root_lin_vel_b[0]
+        w_b = robot_data.root_ang_vel_b[0]
 
         forces = contact_sensor.data.net_forces_w[:, foot_indices_t, :].norm(dim=-1)
         in_contact = forces > 1.0
@@ -157,6 +159,7 @@ def run(args: argparse.Namespace) -> int:
         vcmd_arr[step] = v_cmd
         vx_arr[step] = float(v_b[0].item())
         vy_arr[step] = float(v_b[1].item())
+        wz_arr[step] = float(w_b[2].item())
         contact_arr[step] = in_contact[0].detach().cpu().numpy()
         force_arr[step] = forces[0].detach().cpu().numpy()
 
@@ -172,6 +175,7 @@ def run(args: argparse.Namespace) -> int:
         vcmd=vcmd_arr[:n_recorded],
         vx=vx_arr[:n_recorded],
         vy=vy_arr[:n_recorded],
+        wz=wz_arr[:n_recorded],
         contact=contact_arr[:n_recorded],
         force=force_arr[:n_recorded],
         sim_dt=np.array(sim_dt, dtype=np.float32),

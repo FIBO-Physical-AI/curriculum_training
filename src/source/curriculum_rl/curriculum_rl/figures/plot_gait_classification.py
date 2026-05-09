@@ -24,6 +24,8 @@ GAIT_NAMES = [
     "Two-Beat Walking",
     "Trotting",
     "Fly Trotting",
+    "Pacing",
+    "Bounding",
     "Unknown",
 ]
 
@@ -32,22 +34,10 @@ GAIT_COLORS = {
     "Two-Beat Walking": "#34d399",
     "Trotting": "#f59e0b",
     "Fly Trotting": "#ef4444",
+    "Pacing": "#a78bfa",
+    "Bounding": "#ec4899",
     "Unknown": "#9ca3af",
 }
-
-
-def _phase_offset(a: np.ndarray, b: np.ndarray) -> float:
-    n = len(a)
-    if n == 0:
-        return 0.5
-    corr = np.correlate(a.astype(float) - a.mean(), b.astype(float) - b.mean(), mode="full")
-    if corr.max() == 0:
-        return 0.5
-    lag = int(np.argmax(corr)) - (n - 1)
-    stride_period = _stride_period(a)
-    if stride_period <= 0:
-        return 0.5
-    return abs(lag / stride_period) % 1.0
 
 
 def _stride_period(contact: np.ndarray) -> float:
@@ -55,35 +45,98 @@ def _stride_period(contact: np.ndarray) -> float:
     starts = np.where(edges == 1)[0]
     if len(starts) < 2:
         return 0.0
-    periods = np.diff(starts)
-    return float(np.mean(periods))
+    return float(np.mean(np.diff(starts)))
+
+
+def _phase_offset(ref: np.ndarray, other: np.ndarray, period: float) -> float:
+    n = len(ref)
+    if n == 0 or period <= 0:
+        return 0.0
+    a = ref.astype(float) - ref.mean()
+    b = other.astype(float) - other.mean()
+    if a.std() < 1e-6 or b.std() < 1e-6:
+        return 0.0
+    corr = np.correlate(b, a, mode="full")
+    lag = int(np.argmax(corr)) - (n - 1)
+    return (lag / period) % 1.0
+
+
+def _cyclic_dist(a: np.ndarray, b: np.ndarray) -> float:
+    d = np.abs(a - b)
+    return float(np.minimum(d, 1.0 - d).mean())
+
+
+_TROT_TARGET = np.array([0.0, 0.5, 0.5, 0.0])
+_PACE_TARGET = np.array([0.0, 0.5, 0.0, 0.5])
+_BOUND_TARGET = np.array([0.0, 0.0, 0.5, 0.5])
+_WALK_TARGETS = [
+    np.array([0.0, 0.5, 0.25, 0.75]),
+    np.array([0.0, 0.5, 0.75, 0.25]),
+    np.array([0.0, 0.25, 0.5, 0.75]),
+    np.array([0.0, 0.75, 0.5, 0.25]),
+]
 
 
 def classify_gait(contact: np.ndarray) -> tuple[str, float]:
     n_steps, n_feet = contact.shape
-    if n_steps == 0 or n_feet < 4:
+    if n_steps < 20 or n_feet < 4:
         return "Unknown", 0.0
 
     fl, fr, rl, rr = contact[:, 0], contact[:, 1], contact[:, 2], contact[:, 3]
 
-    flight_frac = float(np.mean(contact.sum(axis=1) == 0))
-    all_contact_frac = float(np.mean(contact.sum(axis=1) == 4))
     duty = float(contact.mean())
+    n_in_contact = contact.sum(axis=1)
+    flight_frac = float(np.mean(n_in_contact == 0))
+    full_support_frac = float(np.mean(n_in_contact == 4))
 
-    diag1 = _phase_offset(fl, rr)
-    diag2 = _phase_offset(fr, rl)
-    diag_sync = (diag1 + diag2) / 2.0
+    if duty > 0.97:
+        return "Unknown", 0.4
 
-    if flight_frac > 0.05:
-        return "Fly Trotting", float(np.clip(flight_frac * 4.0, 0.0, 1.0))
+    period = _stride_period(fl)
+    if period < 4.0:
+        if flight_frac > 0.04:
+            return "Fly Trotting", float(np.clip(flight_frac * 5, 0.2, 1.0))
+        if duty > 0.75:
+            return "Four-Beat Walking", 0.3
+        return "Trotting", 0.3
 
-    if diag_sync > 0.20:
-        return "Four-Beat Walking", float(np.clip(diag_sync, 0.0, 1.0))
+    phases = np.array([
+        0.0,
+        _phase_offset(fl, fr, period),
+        _phase_offset(fl, rl, period),
+        _phase_offset(fl, rr, period),
+    ])
 
-    if all_contact_frac > 0.05:
-        return "Two-Beat Walking", float(np.clip(all_contact_frac * 4.0, 0.0, 1.0))
+    score_trot = _cyclic_dist(phases, _TROT_TARGET)
+    score_pace = _cyclic_dist(phases, _PACE_TARGET)
+    score_bound = _cyclic_dist(phases, _BOUND_TARGET)
+    score_walk = min(_cyclic_dist(phases, t) for t in _WALK_TARGETS)
 
-    return "Trotting", float(np.clip(1.0 - diag_sync, 0.0, 1.0))
+    pattern_name, pattern_score = min(
+        [("trot", score_trot), ("pace", score_pace),
+         ("bound", score_bound), ("walk", score_walk)],
+        key=lambda x: x[1],
+    )
+    conf = float(np.clip(1.0 - 4.0 * pattern_score, 0.0, 1.0))
+
+    if flight_frac > 0.04:
+        if pattern_name == "bound":
+            return "Bounding", conf
+        return "Fly Trotting", float(max(conf, np.clip(flight_frac * 5, 0.3, 1.0)))
+
+    if pattern_name == "walk" and duty > 0.62:
+        return "Four-Beat Walking", conf
+
+    if pattern_name == "pace":
+        return "Pacing", conf
+
+    if pattern_name == "bound":
+        return "Bounding", conf
+
+    if full_support_frac > 0.12 and duty > 0.55:
+        return "Two-Beat Walking", conf
+
+    return "Trotting", conf
 
 
 def _find_traces(traces_dir: Path) -> dict[str, list[Path]]:
@@ -155,6 +208,7 @@ def plot_gait_classification(
         axes = axes.reshape(1, -1)
 
     bin_width = 4.0 / num_bins
+    seen_gaits: set[str] = set()
 
     for ci, cond in enumerate(conditions):
         files = cond_to_files[cond]
@@ -176,6 +230,7 @@ def plot_gait_classification(
         for b in range(num_bins):
             ax = axes[b, ci]
             _draw_cell(ax, all_gaits[b], all_conf[b])
+            seen_gaits.update(all_gaits[b])
 
             if ci == 0:
                 v_center = (b + 0.5) * bin_width
@@ -189,16 +244,17 @@ def plot_gait_classification(
 
     legend_patches = [
         mpatches.Patch(facecolor=GAIT_COLORS[g], label=g, alpha=0.85)
-        for g in GAIT_NAMES if g != "Unknown"
+        for g in GAIT_NAMES if g in seen_gaits
     ]
-    fig.legend(
-        handles=legend_patches,
-        loc="lower center",
-        ncol=len(legend_patches),
-        frameon=False,
-        fontsize=10,
-        bbox_to_anchor=(0.5, 0.005),
-    )
+    if legend_patches:
+        fig.legend(
+            handles=legend_patches,
+            loc="lower center",
+            ncol=len(legend_patches),
+            frameon=False,
+            fontsize=10,
+            bbox_to_anchor=(0.5, 0.005),
+        )
 
     fig.subplots_adjust(top=0.96, bottom=0.07, left=0.06, right=0.99,
                         hspace=0.35, wspace=0.12)

@@ -20,26 +20,18 @@ from curriculum_rl.figures._util import (
 FOOT_LABELS = ["FL", "FR", "RL", "RR"]
 
 GAIT_NAMES = [
-    "Stand/Walk",
-    "Walk",
-    "Amble",
-    "Trot",
-    "Pace",
-    "Fast-trot",
-    "Bound/Gallop",
-    "Pronk",
+    "Four-Beat Walking",
+    "Two-Beat Walking",
+    "Trotting",
+    "Fly Trotting",
     "Unknown",
 ]
 
 GAIT_COLORS = {
-    "Stand/Walk": "#93c5fd",
-    "Walk": "#60a5fa",
-    "Amble": "#34d399",
-    "Trot": "#10b981",
-    "Pace": "#f59e0b",
-    "Fast-trot": "#f97316",
-    "Bound/Gallop": "#ef4444",
-    "Pronk": "#a855f7",
+    "Four-Beat Walking": "#60a5fa",
+    "Two-Beat Walking": "#34d399",
+    "Trotting": "#f59e0b",
+    "Fly Trotting": "#ef4444",
     "Unknown": "#9ca3af",
 }
 
@@ -69,48 +61,29 @@ def _stride_period(contact: np.ndarray) -> float:
 
 def classify_gait(contact: np.ndarray) -> tuple[str, float]:
     n_steps, n_feet = contact.shape
-    if n_steps == 0:
+    if n_steps == 0 or n_feet < 4:
         return "Unknown", 0.0
-    if n_feet < 4:
-        return "Unknown", 0.0
-
-    duty_per_foot = contact.mean(axis=0)
-    df = float(duty_per_foot.mean())
-    has_flight = bool(np.any(contact.sum(axis=1) == 0))
-
-    if df > 0.90:
-        return "Stand/Walk", df
-    if df > 0.80:
-        return "Walk", df
 
     fl, fr, rl, rr = contact[:, 0], contact[:, 1], contact[:, 2], contact[:, 3]
 
-    diag1_phase = _phase_offset(fl, rr)
-    diag2_phase = _phase_offset(fr, rl)
-    diag_sync = (abs(diag1_phase) + abs(diag2_phase)) / 2.0
+    flight_frac = float(np.mean(contact.sum(axis=1) == 0))
+    all_contact_frac = float(np.mean(contact.sum(axis=1) == 4))
+    duty = float(contact.mean())
 
-    lat1_phase = _phase_offset(fl, rl)
-    lat2_phase = _phase_offset(fr, rr)
-    lat_sync = (abs(lat1_phase) + abs(lat2_phase)) / 2.0
+    diag1 = _phase_offset(fl, rr)
+    diag2 = _phase_offset(fr, rl)
+    diag_sync = (diag1 + diag2) / 2.0
 
-    all_phases = [_phase_offset(fl, fr), _phase_offset(fl, rl), _phase_offset(fl, rr)]
-    all_sync = float(np.mean([abs(p) for p in all_phases]))
+    if flight_frac > 0.05:
+        return "Fly Trotting", float(np.clip(flight_frac * 4.0, 0.0, 1.0))
 
-    if 0.65 < df <= 0.80:
-        return "Amble", 1.0 - min(diag_sync, lat_sync)
+    if diag_sync > 0.20:
+        return "Four-Beat Walking", float(np.clip(diag_sync, 0.0, 1.0))
 
-    if df > 0.50:
-        if diag_sync < lat_sync:
-            return "Trot", float(np.clip(1.0 - diag_sync, 0.0, 1.0))
-        return "Pace", float(np.clip(1.0 - lat_sync, 0.0, 1.0))
+    if all_contact_frac > 0.05:
+        return "Two-Beat Walking", float(np.clip(all_contact_frac * 4.0, 0.0, 1.0))
 
-    if not has_flight:
-        return "Fast-trot", float(1.0 - df)
-
-    if all_sync < 0.15:
-        return "Pronk", float(1.0 - all_sync)
-
-    return "Bound/Gallop", float(1.0 - df)
+    return "Trotting", float(np.clip(1.0 - diag_sync, 0.0, 1.0))
 
 
 def _find_traces(traces_dir: Path) -> dict[str, list[Path]]:
@@ -221,7 +194,7 @@ def plot_gait_classification(
     fig.legend(
         handles=legend_patches,
         loc="lower center",
-        ncol=4,
+        ncol=len(legend_patches),
         frameon=False,
         fontsize=10,
         bbox_to_anchor=(0.5, 0.005),

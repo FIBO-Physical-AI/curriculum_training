@@ -82,7 +82,8 @@ def run(args: argparse.Namespace) -> int:
         use_fabric=True,
         entry_point_key="play_env_cfg_entry_point",
     )
-    env = gym.make(task_id, cfg=env_cfg)
+    env_cfg.episode_length_s = float(total_duration) + 5.0
+    env = gym.make(task_id, cfg=env_cfg, render_mode="rgb_array" if args.video else None)
 
     if args.video:
         if args.video_dir is not None:
@@ -124,6 +125,7 @@ def run(args: argparse.Namespace) -> int:
     vy_arr = np.zeros(total_steps, dtype=np.float32)
     contact_arr = np.zeros((total_steps, n_feet), dtype=np.bool_)
     force_arr = np.zeros((total_steps, n_feet), dtype=np.float32)
+    n_recorded = total_steps
 
     reset_result = env.reset()
     obs = reset_result[0] if isinstance(reset_result, tuple) else reset_result
@@ -164,27 +166,25 @@ def run(args: argparse.Namespace) -> int:
         force_arr[step] = forces[0].detach().cpu().numpy()
 
         if bool(dones[0].item()):
-            reset_result = env.reset()
-            obs = reset_result[0] if isinstance(reset_result, tuple) else reset_result
-            cmd_term.vel_command_b[:, 0] = v_cmd
-            cmd_term.vel_command_b[:, 1] = 0.0
-            cmd_term.vel_command_b[:, 2] = 0.0
+            print(f"[eval_ramp] WARN: physical termination at step={step} t={t:.2f}s vcmd={v_cmd:.2f} vx={vx_arr[step]:.2f}")
+            n_recorded = step + 1
+            break
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(
         str(args.out),
-        t=t_arr,
-        vcmd=vcmd_arr,
-        vx=vx_arr,
-        vy=vy_arr,
-        contact=contact_arr,
-        force=force_arr,
+        t=t_arr[:n_recorded],
+        vcmd=vcmd_arr[:n_recorded],
+        vx=vx_arr[:n_recorded],
+        vy=vy_arr[:n_recorded],
+        contact=contact_arr[:n_recorded],
+        force=force_arr[:n_recorded],
         sim_dt=np.array(sim_dt, dtype=np.float32),
         foot_names=np.array(foot_names),
         condition=np.array(args.condition),
         seed=np.array(args.seed),
     )
-    print(f"[eval_ramp] saved {total_steps} steps -> {args.out}")
+    print(f"[eval_ramp] saved {n_recorded} steps -> {args.out}")
 
     env.close()
 

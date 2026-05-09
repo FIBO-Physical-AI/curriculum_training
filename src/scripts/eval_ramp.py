@@ -25,10 +25,14 @@ def build_argparser() -> argparse.ArgumentParser:
     parser.add_argument("--v-start", type=float, default=0.0)
     parser.add_argument("--v-end", type=float, default=4.0)
     parser.add_argument("--duration", type=float, default=30.0, help="ramp duration in seconds")
+    parser.add_argument("--hold-duration", type=float, default=10.0,
+                        help="seconds held at v_end after the ramp completes")
     parser.add_argument("--out", type=Path, default=None,
                         help="output npz path; defaults to src/results/ramp_<condition>_seed<N>.npz")
     parser.add_argument("--video", action="store_true",
                         help="record a video of the ramp rollout")
+    parser.add_argument("--video-dir", type=Path, default=None,
+                        help="directory to write ramp.mp4 into; defaults to <out_parent>/ramp_<cond>_seed<N>_video")
     parser.add_argument("--video-length", type=int, default=0,
                         help="max frames to record (0 = full duration)")
     return parser
@@ -37,7 +41,8 @@ def build_argparser() -> argparse.ArgumentParser:
 def run(args: argparse.Namespace) -> int:
     from isaaclab.app import AppLauncher
 
-    video_steps = args.video_length if args.video_length > 0 else int(args.duration * 50 + 200)
+    total_duration = args.duration + max(0.0, args.hold_duration)
+    video_steps = args.video_length if args.video_length > 0 else int(total_duration * 50 + 200)
 
     app_cfg = argparse.Namespace(
         headless=True,
@@ -80,13 +85,16 @@ def run(args: argparse.Namespace) -> int:
     env = gym.make(task_id, cfg=env_cfg)
 
     if args.video:
-        video_dir = args.out.parent / f"ramp_{args.condition}_seed{args.seed}_video"
+        if args.video_dir is not None:
+            video_dir = args.video_dir
+        else:
+            video_dir = args.out.parent / f"ramp_{args.condition}_seed{args.seed}_video"
         video_dir.mkdir(parents=True, exist_ok=True)
         try:
             env = gym.wrappers.RecordVideo(
                 env,
                 video_folder=str(video_dir),
-                name_prefix=f"ramp_{args.condition}_seed{args.seed}",
+                name_prefix="ramp",
                 episode_trigger=lambda ep: True,
                 disable_logger=True,
             )
@@ -102,7 +110,8 @@ def run(args: argparse.Namespace) -> int:
     policy = runner.get_inference_policy(device=env.unwrapped.device)
 
     sim_dt = float(env.unwrapped.step_dt)
-    total_steps = int(args.duration / sim_dt)
+    total_steps = int(total_duration / sim_dt)
+    ramp_steps = int(args.duration / sim_dt)
 
     contact_sensor = env.unwrapped.scene["contact_forces"]
     foot_indices, foot_names = contact_sensor.find_bodies(".*_foot")
@@ -123,8 +132,11 @@ def run(args: argparse.Namespace) -> int:
 
     for step in range(total_steps):
         t = step * sim_dt
-        frac = t / max(args.duration, 1e-6)
-        v_cmd = args.v_start + frac * (args.v_end - args.v_start)
+        if step < ramp_steps:
+            frac = t / max(args.duration, 1e-6)
+            v_cmd = args.v_start + frac * (args.v_end - args.v_start)
+        else:
+            v_cmd = args.v_end
 
         cmd_term.vel_command_b[:, 0] = v_cmd
         cmd_term.vel_command_b[:, 1] = 0.0
@@ -175,6 +187,26 @@ def run(args: argparse.Namespace) -> int:
     print(f"[eval_ramp] saved {total_steps} steps -> {args.out}")
 
     env.close()
+
+    if args.video:
+        try:
+            target_video_dir = args.video_dir if args.video_dir is not None \
+                else args.out.parent / f"ramp_{args.condition}_seed{args.seed}_video"
+            mp4s = sorted(target_video_dir.glob("ramp*.mp4"))
+            if mp4s:
+                src = mp4s[0]
+                dst = target_video_dir / "ramp.mp4"
+                if src != dst:
+                    if dst.exists():
+                        dst.unlink()
+                    src.rename(dst)
+                for extra in mp4s[1:]:
+                    if extra.exists():
+                        extra.unlink()
+                print(f"[eval_ramp] video -> {dst}")
+        except Exception as e:
+            print(f"[eval_ramp] WARN: post-rename failed ({e})")
+
     app.close()
     return 0
 

@@ -18,16 +18,6 @@ FOOT_COLORS = ["#3b82f6", "#ef4444", "#10b981", "#f59e0b"]
 _RAMP_RE = re.compile(r"ramp_([a-z_]+)_seed(\d+)")
 
 
-def _rolling_duty(contact: np.ndarray, window_steps: int) -> np.ndarray:
-    n, n_feet = contact.shape
-    out = np.full((n, n_feet), np.nan)
-    for i in range(n):
-        lo = max(0, i - window_steps // 2)
-        hi = min(n, i + window_steps // 2 + 1)
-        out[i] = contact[lo:hi].mean(axis=0)
-    return out
-
-
 def _classify_windows(
     contact: np.ndarray,
     sim_dt: float,
@@ -76,11 +66,9 @@ def _draw_column(
     sim_dt = float(z["sim_dt"])
     n_feet = contact.shape[1]
 
-    window_steps = max(1, int(window_s / sim_dt))
-    duty = _rolling_duty(contact, window_steps)
     centers, gaits, confs = _classify_windows(contact, sim_dt, window_s=window_s, stride_s=stride_s)
 
-    ax1, ax2, ax3, ax4 = axes
+    ax1, ax2, ax3 = axes
 
     ax1.plot(t, vcmd, color="#9ca3af", lw=1.5, ls="--", label="v_cmd")
     ax1.plot(t, vx, color="#3b82f6", lw=1.8, label="v_x")
@@ -108,27 +96,17 @@ def _draw_column(
     if show_ylabel:
         ax2.set_ylabel("foot contact")
 
-    mean_duty = duty.mean(axis=1)
-    for foot_i in range(min(n_feet, 4)):
-        ax3.plot(t, duty[:, foot_i], color=FOOT_COLORS[foot_i], lw=1.0, alpha=0.5,
-                 label=FOOT_LABELS[foot_i])
-    ax3.plot(t, mean_duty, color="#111827", lw=2.0, label="mean", zorder=5)
-    ax3.axhline(0.5, color="#9ca3af", lw=0.8, ls=":")
-    ax3.set_ylim(-0.05, 1.05)
-    if show_ylabel:
-        ax3.set_ylabel(f"duty factor\n({window_s:.1f}s window)")
-    ax3.legend(loc="upper right", frameon=False, fontsize=8, ncol=5)
-
     stride_s_half = stride_s / 2.0
     for center, gait, conf in zip(centers, gaits, confs):
         color = GAIT_COLORS.get(gait, "#9ca3af")
-        ax4.barh(0, stride_s, left=center - stride_s_half, height=0.6,
+        ax3.barh(0, stride_s, left=center - stride_s_half, height=0.6,
                  color=color, alpha=0.85, linewidth=0)
-    ax4.set_ylim(-0.5, 0.5)
-    ax4.set_yticks([])
+    ax3.set_xlim(t[0], t[-1])
+    ax3.set_ylim(-0.5, 0.5)
+    ax3.set_yticks([])
     if show_ylabel:
-        ax4.set_ylabel("gait label")
-    ax4.set_xlabel("time (s)")
+        ax3.set_ylabel("gait label")
+    ax3.set_xlabel("time (s)")
 
 
 def plot_gait_transition(
@@ -145,48 +123,52 @@ def plot_gait_transition(
     if not conditions:
         conditions = sorted(cond_to_path.keys())
     n_cols = len(conditions)
+    n_rows = 3
 
     apply_style()
+    plt.rcParams["figure.constrained_layout.use"] = False
     fig, all_axes = plt.subplots(
-        4, n_cols,
-        figsize=(7 * n_cols, 10),
+        n_rows, n_cols,
+        figsize=(6.0 * n_cols, 7.5),
         sharex="col",
     )
     if n_cols == 1:
-        all_axes = all_axes.reshape(4, 1)
+        all_axes = all_axes.reshape(n_rows, 1)
 
     for ci, cond in enumerate(conditions):
-        col_axes = [all_axes[r, ci] for r in range(4)]
+        col_axes = [all_axes[r, ci] for r in range(n_rows)]
         _draw_column(col_axes, cond_to_path[cond], window_s, stride_s, show_ylabel=(ci == 0))
         label = CONDITION_LABEL.get(cond, cond)
         color = CONDITION_COLOR.get(cond, "#111827")
         all_axes[0, ci].set_title(label, fontsize=12, fontweight="bold", color=color)
 
-    legend_gaits = sorted({
-        g
-        for path in cond_to_path.values()
-        for _zz in [np.load(path)]
-        for g in _classify_windows(
-            _zz["contact"].astype(bool),
-            float(_zz["sim_dt"]),
+    legend_gaits: set[str] = set()
+    for path in cond_to_path.values():
+        z = np.load(path)
+        _, gaits, _ = _classify_windows(
+            z["contact"].astype(bool),
+            float(z["sim_dt"]),
             window_s=window_s, stride_s=stride_s,
-        )[1]
-    })
+        )
+        legend_gaits.update(gaits)
+
     legend_patches = [
         mpatches.Patch(facecolor=GAIT_COLORS[g], label=g, alpha=0.85)
-        for g in legend_gaits if g in GAIT_COLORS
+        for g in sorted(legend_gaits) if g in GAIT_COLORS
     ]
     fig.legend(
         handles=legend_patches,
         loc="lower center",
         frameon=False,
         fontsize=9,
-        ncol=len(legend_patches),
+        ncol=max(1, len(legend_patches)),
         bbox_to_anchor=(0.5, 0.0),
     )
 
-    fig.suptitle("Gait Transition: 0 → 4 m/s ramp", fontsize=14, fontweight="bold")
-    fig.subplots_adjust(top=0.93, bottom=0.07, hspace=0.15, wspace=0.18)
+    fig.suptitle("Gait Transition: 0 → 4 m/s ramp + 4 m/s hold",
+                 fontsize=14, fontweight="bold")
+    fig.subplots_adjust(top=0.93, bottom=0.10, left=0.07, right=0.99,
+                        hspace=0.25, wspace=0.20)
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_path, dpi=150, bbox_inches="tight")

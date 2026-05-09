@@ -15,7 +15,7 @@ $$
 r_{\text{en}} \;=\; \exp\!\left(-\,\dfrac{P}{\sigma_x\,|v_x| + \sigma_z\,|\omega_z|}\right), \qquad P \;=\; \sum_{j=1}^{12} |\dot q_j|\,|\tau_j|,
 $$
 
-with paper defaults $\sigma_x = 1000$, $\sigma_z = 500$. The denominator only grows when the body is actually moving. High-frequency staccato motion (large $P$, small $|v_x|$) drives $r_{\text{en}}$ near zero; smooth fast motion (large $P$, large $|v_x|$) pays a stable bonus. The shaping is power-vs-displacement, not gait-shape: the policy is rewarded for "moved $1$ m on this much joint power", not for "took swings of this duration in this contact pattern".
+with $\sigma_x = 500$, $\sigma_z = 250$ (empirically chosen via the calibration procedure in §1.1.1; the paper defaults are $\sigma_x = 1000$, $\sigma_z = 500$). The denominator only grows when the body is actually moving. High-frequency staccato motion (large $P$, small $|v_x|$) drives $r_{\text{en}}$ near zero; smooth fast motion (large $P$, large $|v_x|$) pays a stable bonus. The shaping is power-vs-displacement, not gait-shape: the policy is rewarded for "moved $1$ m on this much joint power", not for "took swings of this duration in this contact pattern".
 
 **The setup, briefly.** We zeroed `feet_air_time.weight` and `air_time_variance.weight`, added `energy.weight = 1.0` (function `energy_cot`, see Eq. (5)), kept the five sprint-retune smoothness/scale changes from update 1's Table 1 (still needed to make running net-positive against the upstream smoothness penalties), and re-ran the three-condition $\times$ three-seed comparison on the `gait-emergence` branch. Two side adjustments rode along: the compute budget reverted to the proposal's $3000$ iter $\times\ 4096$ envs (the new reward reaches plateau earlier than the sprint retune did, so the doubled budget from update 1 was no longer needed), and two PhysX flags were tightened for stability at high contact rates (`gpu_max_rigid_patch_count` raised to $20\cdot 2^{15}$, `enabled_self_collisions = False`). The full domain-randomization block, observation and critic specifications, terminations, PD gains, and PPO hyperparameters are inherited from upstream; the curriculum machinery and binned command space are unchanged from update 1.
 
@@ -62,12 +62,64 @@ r_{\text{smooth}} \;=\; -\,|w_{\dot q}|\,\|\dot q\|^2 \;-\; |w_{\ddot q}|\,\|\dd
 $$
 
 $$
-r_{\text{en}} = \exp\!\left(-\,\dfrac{P}{\max(\sigma_x|v_x| + \sigma_z|\omega_z|,\,\varepsilon)}\right), \qquad P = \sum_{j=1}^{12} |\dot q_j|\,|\tau_j|, \quad \sigma_x = 1000,\ \sigma_z = 500,\ \varepsilon = 0.1. \tag{5}
+r_{\text{en}} = \exp\!\left(-\,\dfrac{P}{\max(\sigma_x|v_x| + \sigma_z|\omega_z|,\,\varepsilon)}\right), \qquad P = \sum_{j=1}^{12} |\dot q_j|\,|\tau_j|, \quad \sigma_x = 500,\ \sigma_z = 250,\ \varepsilon = 0.1. \tag{5}
 $$
 
-Eq. (5) is read element-wise per environment per step; $P$ is mechanical power summed over all twelve joints. The $\sigma_x |v_x|$ denominator means the denominator only grows when the body is actually moving, so a policy that stands still keeps the denominator at $\varepsilon = 0.1$ and the term saturates at $\exp(-P/0.1)$, which is essentially zero whenever any joint is loaded. A policy that moves at the commanded speed inflates the denominator (e.g.\ at $|v_x| = 3$ m/s, $\sigma_x|v_x| = 3000$) and the term pays out a value in $[0.5, 0.9]$ for typical mechanical power levels. The implementation lives at `src/source/curriculum_rl/curriculum_rl/envs/liang_composite_reward.py:25` (`energy_cot`).
+Eq. (5) is read element-wise per environment per step; $P$ is mechanical power summed over all twelve joints. The $\sigma_x |v_x|$ denominator means the denominator only grows when the body is actually moving, so a policy that stands still keeps the denominator at $\varepsilon = 0.1$ and the term saturates at $\exp(-P/0.1)$, which is essentially zero whenever any joint is loaded. A policy that moves at the commanded speed inflates the denominator (e.g.\ at $|v_x| = 3$ m/s, $\sigma_x|v_x| = 1500$) and the term pays out a value in $[0.4, 0.8]$ for typical mechanical power levels. The implementation lives at `src/source/curriculum_rl/curriculum_rl/envs/liang_composite_reward.py:25` (`energy_cot`).
 
 The yaw command is fixed at $\omega_z^{\mathrm{cmd}}=0$ (§1.6), so $r_{\text{ang}}$ continues to reward holding zero yaw rate; the term itself is unmodified at upstream weight $w_{\text{ang}}=0.75$.
+
+### 1.1.1 Sigma calibration procedure
+
+The Liang 2024 paper [liang2024envelope] §IV-A.1 publishes $\sigma_x = 1000$, $\sigma_z = 500$, $\alpha_{\text{en}} = 1.0$, $\sigma_v = \sigma_\omega = 0.25$, validated on the Unitree **Go1**. The Go2 used here is a different platform in the same family — heavier, different joint torque envelope, and trained inside a different reward stack (Isaac Lab + the five smoothness weakenings from update 1, not the legged-gym auxiliary block the paper used). The paper itself notes that $\alpha_{\text{en}}$ "should be comparable to motion rewards in order to get a satisfactory RL policy" and shows in Fig. 3 that overly large $\alpha_{\text{en}}$ collapses tracking — i.e., the values are not robot-agnostic. Before locking in the paper defaults, we ran a two-phase calibration to confirm $r_{\text{en}}$ produces a useful gradient on this platform — neither saturated near $0$ (so small $\sigma_x$ that the term reads zero on every policy regardless of motion) nor saturated near $1$ (so large $\sigma_x$ that the term cannot discriminate between collapsed and successful policies). The two phases search over different operating points: Phase 0 is a cheap random-action sweep that brackets the order of magnitude of $\sigma_x$; Phase v4 is a full training-grid sweep that jointly tunes $\sigma_x$, the tracking-reward sharpness $\sigma_{\text{lin}}$, and the energy weight $w_{\text{en}}$.
+
+**Phase 0 — random-action diagnostic.** Run `python src/scripts/sweep_sigma_diagnostic.py` (5--10 min, $512$ envs $\times$ $1000$ steps with random actions). The script tests $\sigma_x \in \{50, 100, 250, 500, 1000, 2000, 5000\}$ at fixed $\sigma_z = \sigma_x / 2$ and prints the mean $r_{\text{en}}$ across all envs and all steps. Read `src/results/phase0_table.txt` and pick $\sigma_x$ values where $\overline{r_{\text{en}}} \in [0.30, 0.75]$ — too low and the energy term saturates, too high and it loses discriminative range. The Phase 0 result on this hardware was:
+
+| $\sigma_x$ | $\overline{r_{\text{en}}}$ | regime |
+|---:|---:|---|
+|    50 | 0.014 | saturated near 0 (too strong) |
+|   100 | 0.064 | strong |
+|   250 | 0.241 | strong, marginal |
+|   500 | 0.438 | useful gradient |
+|  1000 | 0.628 | useful gradient |
+|  2000 | 0.776 | weak gradient |
+|  5000 | 0.896 | saturated near 1 (too weak) |
+
+This brackets the candidate range to $\sigma_x \in \{500, 1000\}$, with $250$ kept as a low-side tiebreaker.
+
+**Phase v4 — full training grid.** Random actions are an unrealistic operating point: a trained policy produces much higher mechanical power and much higher $|v_x|$ than random actions, so Phase 0 only narrows the order of magnitude. To pick the actual values, run `bash src/scripts/run_sweep_v4.sh 250 500 1000` (10--15 hr, 9 full $3000$-iteration training runs). The grid is a $3 \times 3$ over (low/mid/high $\sigma$, three (std, $w_{\text{en}}$) combinations):
+
+| Run | $\sigma_x$ | $\sigma_{\text{lin}}$ | $w_{\text{en}}$ |
+|:---:|---:|---:|---:|
+| 1 | 250  | 0.5 | 1.0 |
+| 2 | 500  | 0.5 | 1.0 |
+| 3 | 1000 | 0.5 | 1.0 |
+| 4 | 250  | 1.0 | 1.0 |
+| 5 | 500  | 1.0 | 1.0 |
+| 6 | 1000 | 1.0 | 1.0 |
+| 7 | 250  | 1.0 | 0.5 |
+| 8 | 500  | 1.0 | 0.5 |
+| 9 | 1000 | 1.0 | 0.5 |
+
+Each run reports the sum of per-bin tracking errors across the 8 bins (`sum_err`) in `src/results/sweep_v4_comparison.md`. The top three from this grid were:
+
+| Rank | Run | $\sigma_x$ | $\sigma_{\text{lin}}$ | $w_{\text{en}}$ | sum\_err |
+|:---:|:---:|---:|---:|---:|---:|
+| 1 | 8 | 500  | 1.0 | 0.5 | 1.538 |
+| 2 | 9 | 1000 | 1.0 | 0.5 | 1.569 |
+| 3 | 6 | 1000 | 1.0 | 1.0 | 1.623 |
+
+Run 8 is the adopted configuration: $\sigma_x = 500$, $\sigma_z = 250$, $\sigma_{\text{lin}} = 1.0$, $w_{\text{en}} = 0.5$. Two observations from the grid: (i) softening the tracking reward from $\sigma_{\text{lin}} = 0.5$ to $1.0$ improved every $\sigma_x$ row, suggesting the upstream $\sigma_{\text{lin}} = 0.5$ was too sharp once the energy term was added; (ii) halving $w_{\text{en}}$ from $1.0$ to $0.5$ improved both surviving $\sigma_x$ rows, consistent with $w_{\text{en}} = 1.0$ over-weighting energy relative to tracking. The chosen $\sigma_x = 500$ sits at the lower boundary of the Phase 0 "useful gradient" band.
+
+**Reproducing the main sweep.** With the calibrated values, the full 3-condition $\times$ 3-seed sweep is launched as
+
+```
+SWEEP_SIGMA_EN_X=500 SWEEP_SIGMA_EN_Z=250 \
+SWEEP_TRACK_STD=1.0 SWEEP_ENERGY_WEIGHT=0.5 \
+SEEDS="0 1 2" bash src/scripts/run_sweep.sh
+```
+
+The four environment variables are read at config build time in `src/source/curriculum_rl/curriculum_rl/envs/go2_velocity_base.py:_apply_liang_additive_energy`. Defaults in that function are the paper values ($\sigma_x = 1000$, $\sigma_z = 500$, $\sigma_{\text{lin}} = 0.5$, $w_{\text{en}} = 1.0$), so omitting any of the four reverts that knob to the paper default.
 
 ### 1.2 Control gains and action interface
 

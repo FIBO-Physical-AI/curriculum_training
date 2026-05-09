@@ -19,14 +19,14 @@ from curriculum_rl.figures._util import (
 
 _SIGNAL_YLABEL = {
     "mean_reward": "per-bin mean return",
-    "r_lin": "per-bin r_lin (velocity tracking)",
-    "r_en": "per-bin r_en (energy reward)",
+    "r_lin": r"per-bin $r_{\mathrm{lin}}$ (velocity tracking)",
+    "r_en": r"per-bin $r_{\mathrm{en}}$ (energy reward)",
 }
 
 _SIGNAL_TITLE = {
     "mean_reward": "Per-bin learning curves",
-    "r_lin": "Per-bin r_lin learning curves",
-    "r_en": "Per-bin r_en learning curves",
+    "r_lin": r"Per-bin $r_{\mathrm{lin}}$ learning curves (velocity tracking)",
+    "r_en": r"Per-bin $r_{\mathrm{en}}$ learning curves (energy reward)",
 }
 
 

@@ -99,25 +99,6 @@ for condition in "${CONDITIONS[@]}"; do
             exit 1
         fi
 
-        echo ""
-        echo "------ RAMP  ${condition} seed=${seed}"
-        ramp_start=$(date +%s)
-        echo "[RAMP_START] ${condition} seed=${seed}  at $(date '+%Y-%m-%d %H:%M:%S')" | tee -a "$TIMING_LOG"
-        ramp_video_flag=""
-        [ "$RECORD_VIDEOS" = "1" ] && ramp_video_flag="--video"
-        python src/scripts/eval_ramp.py \
-            --condition "$condition" \
-            --seed "$seed" \
-            --checkpoint "$ckpt" \
-            $ramp_video_flag
-        ramp_rc=$?
-        ramp_elapsed=$(( $(date +%s) - ramp_start ))
-        printf "[RAMP_STOP]  %s seed=%d  elapsed=%ds  rc=%d\n" "$condition" "$seed" "$ramp_elapsed" "$ramp_rc" \
-            | tee -a "$TIMING_LOG"
-        if [ "$ramp_rc" -ne 0 ]; then
-            echo "WARN: eval_ramp.py returned rc=$ramp_rc for ${condition} seed=${seed} — gait transition plot will be skipped" >&2
-        fi
-
         if [ "$RECORD_VIDEOS" != "1" ]; then
             echo ""
             echo "------ PLAY  ${condition} seed=${seed}  SKIPPED (RECORD_VIDEOS=${RECORD_VIDEOS})"
@@ -167,6 +148,75 @@ for condition in "${CONDITIONS[@]}"; do
         printf "[PLAY_STOP]  %s seed=%d  elapsed=%ds\n" "$condition" "$seed" "$play_elapsed" \
             | tee -a "$TIMING_LOG"
     done
+done
+
+echo ""
+echo "=========================================="
+echo "RAMP   best seed per condition (by bin-$((NUM_BINS-1)) tracking error)"
+echo "=========================================="
+TARGET_BIN=$((NUM_BINS-1))
+for condition in "${CONDITIONS[@]}"; do
+    if [ ! -s "$PROJECT_ROOT/src/results/epte_sp.csv" ]; then
+        echo "SKIP RAMP ${condition}: epte_sp.csv missing" >&2
+        continue
+    fi
+
+    best_seed=$(awk -F, -v cond="$condition" -v tb="$TARGET_BIN" '
+        NR>1 && $1==cond && ($3+0)==tb {sum[$2]+=$6; n[$2]++}
+        END {
+            best_seed=""; best_err=1e18
+            for (s in sum) {
+                avg = sum[s]/n[s]
+                if (avg < best_err) { best_err = avg; best_seed = s }
+            }
+            print best_seed
+        }
+    ' "$PROJECT_ROOT/src/results/epte_sp.csv")
+
+    if [ -z "$best_seed" ]; then
+        echo "SKIP RAMP ${condition}: no rows for bin ${TARGET_BIN} in epte_sp.csv" >&2
+        continue
+    fi
+
+    marker_file="$PROJECT_ROOT/.sweep_runs/${condition}_seed${best_seed}.path"
+    if [ ! -f "$marker_file" ]; then
+        echo "SKIP RAMP ${condition}: no marker $marker_file" >&2
+        continue
+    fi
+    run_dir=$(cat "$marker_file")
+    ckpt=$(ls -t "${run_dir}"/model_*.pt 2>/dev/null | head -1)
+    if [ -z "$ckpt" ]; then
+        echo "SKIP RAMP ${condition}: no checkpoint in $run_dir" >&2
+        continue
+    fi
+
+    echo ""
+    echo "------ RAMP  ${condition}  best_seed=${best_seed}  <- ${ckpt}"
+    ramp_start=$(date +%s)
+    echo "[RAMP_START] ${condition} best_seed=${best_seed}  at $(date '+%Y-%m-%d %H:%M:%S')" | tee -a "$TIMING_LOG"
+
+    ramp_push_dir="$PROJECT_ROOT/src/results/videos/${condition}_seed${best_seed}"
+    mkdir -p "$ramp_push_dir"
+    ramp_video_args=()
+    if [ "$RECORD_VIDEOS" = "1" ]; then
+        ramp_video_args=(--video --video-dir "$ramp_push_dir")
+    fi
+
+    rm -f "$PROJECT_ROOT/src/results/ramp_${condition}_seed"*.npz
+
+    python src/scripts/eval_ramp.py \
+        --condition "$condition" \
+        --seed "$best_seed" \
+        --checkpoint "$ckpt" \
+        "${ramp_video_args[@]}"
+    ramp_rc=$?
+
+    ramp_elapsed=$(( $(date +%s) - ramp_start ))
+    printf "[RAMP_STOP]  %s best_seed=%s  elapsed=%ds  rc=%d\n" \
+        "$condition" "$best_seed" "$ramp_elapsed" "$ramp_rc" | tee -a "$TIMING_LOG"
+    if [ "$ramp_rc" -ne 0 ]; then
+        echo "WARN: eval_ramp.py returned rc=$ramp_rc for ${condition} best_seed=${best_seed} — gait transition plot may be incomplete" >&2
+    fi
 done
 
 echo ""

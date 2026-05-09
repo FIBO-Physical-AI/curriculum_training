@@ -42,7 +42,9 @@ def run(args: argparse.Namespace) -> int:
     from isaaclab.app import AppLauncher
 
     total_duration = args.duration + max(0.0, args.hold_duration)
-    video_steps = args.video_length if args.video_length > 0 else int(total_duration * 50 + 200)
+    sim_dt_guess = 0.02
+    total_steps_guess = int(total_duration / sim_dt_guess)
+    video_steps = args.video_length if args.video_length > 0 else total_steps_guess
 
     app_cfg = argparse.Namespace(
         headless=True,
@@ -96,10 +98,11 @@ def run(args: argparse.Namespace) -> int:
                 env,
                 video_folder=str(video_dir),
                 name_prefix="ramp",
-                episode_trigger=lambda ep: True,
+                step_trigger=lambda step: step == 0,
+                video_length=video_steps,
                 disable_logger=True,
             )
-            print(f"[eval_ramp] video -> {video_dir}")
+            print(f"[eval_ramp] video -> {video_dir} (length={video_steps} frames)")
         except Exception as e:
             print(f"[eval_ramp] WARN: RecordVideo failed ({e}), continuing without video")
 

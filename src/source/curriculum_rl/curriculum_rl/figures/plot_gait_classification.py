@@ -17,47 +17,61 @@ from curriculum_rl.figures._util import (
 )
 
 FOOT_LABELS = ["FL", "FR", "RL", "RR"]
+FOOT_COLORS = ["#dc2626", "#ea580c", "#2563eb", "#059669"]
 
-GAIT_NAMES = [
-    "Four-Beat Walking",
-    "Two-Beat Walking",
-    "Trotting",
-    "Fly Trotting",
-    "Pacing",
-    "Bounding",
-    "Unknown",
-]
 
-GAIT_COLORS = {
-    "Four-Beat Walking": "#60a5fa",
-    "Two-Beat Walking": "#34d399",
-    "Trotting": "#f59e0b",
-    "Fly Trotting": "#ef4444",
-    "Pacing": "#a78bfa",
-    "Bounding": "#ec4899",
-    "Unknown": "#9ca3af",
+GAIT_TEMPLATES: dict[str, dict] = {
+    "Walk":  {"phases": [0.0, 0.5, 0.75, 0.25], "duty": 0.65},
+    "Trot":  {"phases": [0.0, 0.5, 0.5,  0.0],  "duty": 0.50},
+    "Pace":  {"phases": [0.0, 0.5, 0.0,  0.5],  "duty": 0.50},
+    "Bound": {"phases": [0.0, 0.0, 0.5,  0.5],  "duty": 0.40},
+    "Pronk": {"phases": [0.0, 0.0, 0.0,  0.0],  "duty": 0.30},
 }
 
+PHASE_TOLERANCE = 0.10
+STAND_DUTY = 0.95
+MIN_STRIDE_STARTS = 2
+MAX_STRIDE_PERIOD = 50
 
-def _stride_period(contact: np.ndarray) -> float:
-    edges = np.diff(np.concatenate(([0], contact.astype(int), [0])))
-    starts = np.where(edges == 1)[0]
+
+def _stance_starts(mask: np.ndarray) -> np.ndarray:
+    edges = np.diff(np.concatenate(([False], mask.astype(bool), [False])).astype(int))
+    return np.where(edges == 1)[0]
+
+
+def _stride_period(contact_one_foot: np.ndarray) -> float:
+    starts = _stance_starts(contact_one_foot)
     if len(starts) < 2:
         return 0.0
     return float(np.mean(np.diff(starts)))
 
 
-def _phase_offset(ref: np.ndarray, other: np.ndarray, period: float) -> float:
-    n = len(ref)
-    if n == 0 or period <= 0:
+def _first_stance(mask: np.ndarray) -> int:
+    starts = _stance_starts(mask)
+    return int(starts[0]) if len(starts) else 0
+
+
+def _phase_offset_touchdown(
+    ref_starts: np.ndarray,
+    other_starts: np.ndarray,
+    period: float,
+) -> float:
+    if period <= 0 or len(ref_starts) < 1 or len(other_starts) < 1:
         return 0.0
-    a = ref.astype(float) - ref.mean()
-    b = other.astype(float) - other.mean()
-    if a.std() < 1e-6 or b.std() < 1e-6:
+    phases = []
+    for r in ref_starts:
+        deltas = other_starts - r
+        forward = deltas[deltas >= 0]
+        if len(forward):
+            d = float(forward.min())
+        else:
+            d = float((other_starts.max() - r) % period)
+        phases.append((d / period) % 1.0)
+    if not phases:
         return 0.0
-    corr = np.correlate(b, a, mode="full")
-    lag = int(np.argmax(corr)) - (n - 1)
-    return (lag / period) % 1.0
+    angles = 2.0 * np.pi * np.asarray(phases)
+    mean_angle = np.arctan2(np.sin(angles).mean(), np.cos(angles).mean())
+    return float((mean_angle / (2.0 * np.pi)) % 1.0)
 
 
 def _cyclic_dist(a: np.ndarray, b: np.ndarray) -> float:
@@ -65,92 +79,104 @@ def _cyclic_dist(a: np.ndarray, b: np.ndarray) -> float:
     return float(np.minimum(d, 1.0 - d).mean())
 
 
-_TROT_TARGET = np.array([0.0, 0.5, 0.5, 0.0])
-_PACE_TARGET = np.array([0.0, 0.5, 0.0, 0.5])
-_BOUND_TARGET = np.array([0.0, 0.0, 0.5, 0.5])
-_WALK_TARGETS = [
-    np.array([0.0, 0.5, 0.25, 0.75]),
-    np.array([0.0, 0.5, 0.75, 0.25]),
-    np.array([0.0, 0.25, 0.5, 0.75]),
-    np.array([0.0, 0.75, 0.5, 0.25]),
-]
+def _cyclic_dist_max(a: np.ndarray, b: np.ndarray) -> float:
+    d = np.abs(a - b)
+    return float(np.minimum(d, 1.0 - d).max())
 
 
-def classify_gait(contact: np.ndarray) -> tuple[str, float]:
+def _template_score(name: str, phases: np.ndarray, template: np.ndarray) -> float:
+    if name == "Pronk":
+        return _cyclic_dist_max(phases, template)
+    return _cyclic_dist(phases, template)
+
+
+def classify_gait(contact: np.ndarray) -> str:
     n_steps, n_feet = contact.shape
-    if n_steps < 20 or n_feet < 4:
-        return "Unknown", 0.0
+    if n_feet < 4:
+        return "n/a"
 
     fl, fr, rl, rr = contact[:, 0], contact[:, 1], contact[:, 2], contact[:, 3]
-
     duty = float(contact.mean())
-    n_in_contact = contact.sum(axis=1)
-    flight_frac = float(np.mean(n_in_contact == 0))
-    full_support_frac = float(np.mean(n_in_contact == 4))
 
-    if duty > 0.97:
-        return "Unknown", 0.4
+    fl_starts = _stance_starts(fl)
+    fr_starts = _stance_starts(fr)
+    rl_starts = _stance_starts(rl)
+    rr_starts = _stance_starts(rr)
 
-    period = _stride_period(fl)
-    if period < 4.0:
-        if flight_frac > 0.04:
-            return "Fly Trotting", float(np.clip(flight_frac * 5, 0.2, 1.0))
-        if duty > 0.75:
-            return "Four-Beat Walking", 0.3
-        return "Trotting", 0.3
+    no_stride = all(
+        len(s) < MIN_STRIDE_STARTS
+        for s in (fl_starts, fr_starts, rl_starts, rr_starts)
+    )
+    if duty > STAND_DUTY or no_stride:
+        return "Stand"
+
+    if len(fl_starts) < MIN_STRIDE_STARTS:
+        return "n/a"
+    period = float(np.mean(np.diff(fl_starts)))
+    if period <= 0:
+        return "n/a"
+    if period > MAX_STRIDE_PERIOD:
+        return "Stand"
 
     phases = np.array([
         0.0,
-        _phase_offset(fl, fr, period),
-        _phase_offset(fl, rl, period),
-        _phase_offset(fl, rr, period),
+        _phase_offset_touchdown(fl_starts, fr_starts, period),
+        _phase_offset_touchdown(fl_starts, rl_starts, period),
+        _phase_offset_touchdown(fl_starts, rr_starts, period),
     ])
 
-    score_trot = _cyclic_dist(phases, _TROT_TARGET)
-    score_pace = _cyclic_dist(phases, _PACE_TARGET)
-    score_bound = _cyclic_dist(phases, _BOUND_TARGET)
-    score_walk = min(_cyclic_dist(phases, t) for t in _WALK_TARGETS)
-
-    pattern_name, pattern_score = min(
-        [("trot", score_trot), ("pace", score_pace),
-         ("bound", score_bound), ("walk", score_walk)],
-        key=lambda x: x[1],
-    )
-    conf = float(np.clip(1.0 - 4.0 * pattern_score, 0.0, 1.0))
-
-    if flight_frac > 0.04:
-        if pattern_name == "bound":
-            return "Bounding", conf
-        return "Fly Trotting", float(max(conf, np.clip(flight_frac * 5, 0.3, 1.0)))
-
-    if pattern_name == "walk" and duty > 0.62:
-        return "Four-Beat Walking", conf
-
-    if pattern_name == "pace":
-        return "Pacing", conf
-
-    if pattern_name == "bound":
-        return "Bounding", conf
-
-    if full_support_frac > 0.12 and duty > 0.55:
-        return "Two-Beat Walking", conf
-
-    return "Trotting", conf
+    scores = {
+        name: _template_score(name, phases, np.array(t["phases"]))
+        for name, t in GAIT_TEMPLATES.items()
+    }
+    best_name = min(scores, key=scores.get)
+    if scores[best_name] > PHASE_TOLERANCE:
+        return "Irregular"
+    return best_name
 
 
-def hildebrand_metrics(contact: np.ndarray) -> tuple[float, float] | None:
+def classify_gait_with_score(contact: np.ndarray) -> tuple[str, float]:
     n_steps, n_feet = contact.shape
-    if n_steps < 20 or n_feet < 4:
-        return None
-    fl, rl = contact[:, 0], contact[:, 2]
-    period = _stride_period(rl)
-    if period < 4.0:
-        return None
-    duty = float(contact.mean()) * 100.0
-    lag = _phase_offset(rl, fl, period) * 100.0
-    if not (0.0 <= duty <= 100.0):
-        return None
-    return duty, lag
+    if n_feet < 4:
+        return "n/a", float("inf")
+
+    fl = contact[:, 0]
+    duty = float(contact.mean())
+    fl_starts = _stance_starts(fl)
+    fr_starts = _stance_starts(contact[:, 1])
+    rl_starts = _stance_starts(contact[:, 2])
+    rr_starts = _stance_starts(contact[:, 3])
+
+    no_stride = all(
+        len(s) < MIN_STRIDE_STARTS
+        for s in (fl_starts, fr_starts, rl_starts, rr_starts)
+    )
+    if duty > STAND_DUTY or no_stride:
+        return "Stand", 0.0
+
+    if len(fl_starts) < MIN_STRIDE_STARTS:
+        return "n/a", float("inf")
+    period = float(np.mean(np.diff(fl_starts)))
+    if period <= 0:
+        return "n/a", float("inf")
+    if period > MAX_STRIDE_PERIOD:
+        return "Stand", 0.0
+
+    phases = np.array([
+        0.0,
+        _phase_offset_touchdown(fl_starts, fr_starts, period),
+        _phase_offset_touchdown(fl_starts, rl_starts, period),
+        _phase_offset_touchdown(fl_starts, rr_starts, period),
+    ])
+    scores = {
+        name: _template_score(name, phases, np.array(t["phases"]))
+        for name, t in GAIT_TEMPLATES.items()
+    }
+    best_name = min(scores, key=scores.get)
+    best_score = scores[best_name]
+    if best_score > PHASE_TOLERANCE:
+        return "Irregular", best_score
+    return best_name, best_score
 
 
 def _find_traces(traces_dir: Path) -> dict[str, list[Path]]:
@@ -165,69 +191,167 @@ def _find_traces(traces_dir: Path) -> dict[str, list[Path]]:
     return out
 
 
+def _pick_rollout(contact: np.ndarray, vx: np.ndarray, v_cmd: float) -> int:
+    n_roll = contact.shape[0]
+    err = np.abs(vx.mean(axis=1) - v_cmd)
+    survives = np.array([bool(contact[i].any()) for i in range(n_roll)])
+    if survives.any():
+        idx = np.where(survives)[0]
+        return int(idx[np.argmin(err[idx])])
+    return int(np.argmin(err))
+
+
+def _classify_majority(contact_all: np.ndarray) -> tuple[str, float]:
+    labels: list[str] = []
+    score_by_label: dict[str, list[float]] = {}
+    for i in range(contact_all.shape[0]):
+        if not bool(contact_all[i].any()):
+            continue
+        label, score = classify_gait_with_score(contact_all[i])
+        labels.append(label)
+        score_by_label.setdefault(label, []).append(score)
+    if not labels:
+        return "n/a", float("inf")
+    most, _ = Counter(labels).most_common(1)[0]
+    mean_score = float(np.mean(score_by_label[most])) if score_by_label.get(most) else float("inf")
+    return most, mean_score
+
+
+def _draw_observed(ax, contact_window: np.ndarray, sim_dt: float) -> None:
+    n_show = contact_window.shape[0]
+    t = np.arange(n_show) * sim_dt
+    for foot_i in range(4):
+        y_low = 3 - foot_i - 0.4
+        y_high = 3 - foot_i + 0.4
+        mask = contact_window[:, foot_i].astype(bool)
+        if not mask.any():
+            continue
+        edges = np.diff(np.concatenate(([False], mask, [False])).astype(int))
+        starts = np.where(edges == 1)[0]
+        ends = np.where(edges == -1)[0]
+        for s, e in zip(starts, ends):
+            e_clip = min(e, n_show - 1)
+            if e_clip <= s:
+                e_clip = min(s + 1, n_show - 1)
+            ax.fill_between([t[s], t[e_clip]], y_low, y_high,
+                            color=FOOT_COLORS[foot_i], lw=0)
+
+
+def _draw_template(ax, gait: str, period_steps: float, fl_offset: int,
+                   n_show: int, sim_dt: float) -> None:
+    tmpl = GAIT_TEMPLATES.get(gait)
+    if tmpl is None or period_steps < 4.0:
+        return
+    duty_steps = tmpl["duty"] * period_steps
+    for foot_i, phase in enumerate(tmpl["phases"]):
+        s0 = fl_offset + phase * period_steps
+        y_low = 3 - foot_i - 0.42
+        y_high = 3 - foot_i + 0.42
+        for k in range(-3, 200):
+            s = s0 + k * period_steps
+            e = s + duty_steps
+            if s >= n_show:
+                break
+            if e <= 0:
+                continue
+            sx = max(int(round(s)), 0)
+            ex = min(int(round(e)), n_show - 1)
+            if ex <= sx:
+                continue
+            ax.fill_between([sx * sim_dt, ex * sim_dt], y_low, y_high,
+                            facecolor="none",
+                            edgecolor=FOOT_COLORS[foot_i],
+                            hatch="///", linewidth=0.6, alpha=0.55)
+
+
 def plot_gait_classification(
     traces_dir: Path,
     out_path: Path,
     num_bins: int = 8,
+    t_window_s: float = 1.5,
 ) -> None:
     cond_to_files = _find_traces(traces_dir)
     if not cond_to_files:
         raise FileNotFoundError(f"no trace npz files in {traces_dir}")
 
     conditions = [c for c in CONDITION_ORDER if c in cond_to_files]
-    n_cols = len(conditions)
+    n_rows = len(conditions)
+    n_cols = num_bins
 
     apply_style()
     plt.rcParams["figure.constrained_layout.use"] = False
-    fig, axes = plt.subplots(1, n_cols, figsize=(4.6 * n_cols, 4.6), sharey=True)
+
+    fig, axes = plt.subplots(
+        n_rows, n_cols,
+        figsize=(2.0 * n_cols, 1.7 * n_rows),
+        sharex=True, sharey=True,
+    )
+    if n_rows == 1:
+        axes = axes.reshape(1, -1)
     if n_cols == 1:
-        axes = np.array([axes])
+        axes = axes.reshape(-1, 1)
 
-    cmap = plt.get_cmap("viridis")
-
-    for ci, cond in enumerate(conditions):
-        ax = axes[ci]
+    for ri, cond in enumerate(conditions):
         files = cond_to_files[cond]
-        all_pts: list[tuple[float, float, int]] = []
-        for fpath in files:
-            z = np.load(fpath)
-            for b in range(num_bins):
-                key = f"contact_b{b}"
-                if key not in z.files:
-                    continue
-                contact = z[key]
-                for r in range(contact.shape[0]):
-                    m = hildebrand_metrics(contact[r])
-                    if m is None:
-                        continue
-                    all_pts.append((m[0], m[1], b))
+        z = np.load(files[0])
+        sim_dt = float(z["sim_dt"]) if "sim_dt" in z.files else 0.02
+        for b in range(num_bins):
+            ax = axes[ri, b]
+            key_c = f"contact_b{b}"
+            key_vx = f"vx_b{b}"
+            key_vc = f"vcmd_b{b}"
+            if key_c not in z.files:
+                ax.set_axis_off()
+                continue
+            contact = z[key_c]
+            vx = z[key_vx]
+            v_cmd = float(z[key_vc]) if key_vc in z.files else 0.0
+            r = _pick_rollout(contact, vx, v_cmd)
+            gait, score = _classify_majority(contact)
 
-        if all_pts:
-            xs = np.array([p[0] for p in all_pts])
-            ys = np.array([p[1] for p in all_pts])
-            cs = np.array([p[2] for p in all_pts]) / max(num_bins - 1, 1)
-            ax.scatter(xs, ys, c=cs, cmap=cmap, vmin=0, vmax=1,
-                       s=22, alpha=0.6, edgecolors="white", linewidths=0.3)
+            n_show = min(int(t_window_s / sim_dt), contact.shape[1])
+            window = contact[r, :n_show].astype(bool)
+            fl_window = window[:, 0]
+            period_steps = _stride_period(fl_window)
+            fl_offset = _first_stance(fl_window)
 
-        ax.set_xlim(0, 100)
-        ax.set_ylim(0, 100)
-        ax.set_xlabel("duty factor (%)")
-        if ci == 0:
-            ax.set_ylabel("FL lag from RL (% stride)")
-        ax.set_title(CONDITION_LABEL.get(cond, cond),
-                     color=CONDITION_COLOR.get(cond, "#111827"))
-        ax.set_xticks([0, 25, 50, 75, 100])
-        ax.set_yticks([0, 25, 50, 75, 100])
-        ax.grid(True, alpha=0.25, lw=0.5)
-        ax.set_aspect("equal")
+            if score < PHASE_TOLERANCE and gait in GAIT_TEMPLATES:
+                _draw_template(ax, gait, period_steps, fl_offset, n_show, sim_dt)
+            _draw_observed(ax, window, sim_dt)
 
-    sm = plt.cm.ScalarMappable(cmap=cmap, norm=plt.Normalize(vmin=0, vmax=4.0))
-    sm.set_array([])
-    cbar = fig.colorbar(sm, ax=axes.tolist(), location="right",
-                        shrink=0.7, pad=0.02, aspect=22)
-    cbar.set_label("velocity bin centre (m/s)")
+            ax.set_xlim(0, t_window_s)
+            ax.set_ylim(-0.7, 3.7)
+            ax.set_yticks([3, 2, 1, 0])
+            if b == 0:
+                ax.set_yticklabels(FOOT_LABELS, fontsize=9)
+                ax.set_ylabel(CONDITION_LABEL.get(cond, cond),
+                              fontsize=11, fontweight="bold",
+                              color=CONDITION_COLOR.get(cond, "#111827"))
+            if ri == 0:
+                ax.set_title(f"v={v_cmd:.2f} m/s\n{gait}", fontsize=10)
+            else:
+                ax.set_title(gait, fontsize=10)
+            if ri == n_rows - 1:
+                ax.set_xlabel("t (s)", fontsize=9)
+                ax.tick_params(axis="x", labelsize=8)
+            else:
+                ax.tick_params(axis="x", labelbottom=False)
+            ax.grid(False)
+            for spine in ("top", "right"):
+                ax.spines[spine].set_visible(False)
 
-    fig.subplots_adjust(top=0.92, bottom=0.12, left=0.06, right=0.90, wspace=0.10)
+    from matplotlib.patches import Patch
+    handles = [
+        Patch(facecolor="#374151", label="observed contact"),
+        Patch(facecolor="none", edgecolor="#374151", hatch="///", label="canonical template"),
+    ]
+    fig.legend(handles=handles, loc="lower center", ncol=2, frameon=False,
+               bbox_to_anchor=(0.5, 0.005), fontsize=10)
+
+    fig.suptitle("Gait Classification per Velocity Bin (observed vs canonical template)",
+                 fontsize=13, fontweight="bold", y=0.995)
+    fig.subplots_adjust(top=0.88, bottom=0.13, left=0.06, right=0.99,
+                        hspace=0.35, wspace=0.10)
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_path, dpi=150, bbox_inches="tight")
@@ -239,8 +363,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--traces-dir", type=Path, default=Path("src/results/eval_traces"))
     parser.add_argument("--out", type=Path, default=Path("src/results/figures/gait_classification.png"))
     parser.add_argument("--num-bins", type=int, default=8)
+    parser.add_argument("--t-window", type=float, default=1.5)
     args = parser.parse_args(argv)
-    plot_gait_classification(args.traces_dir, args.out, num_bins=args.num_bins)
+    plot_gait_classification(args.traces_dir, args.out, num_bins=args.num_bins,
+                             t_window_s=args.t_window)
     print(f"wrote {args.out}")
     return 0
 

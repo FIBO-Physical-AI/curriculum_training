@@ -114,6 +114,7 @@ def run(args: argparse.Namespace) -> int:
     traces_per_bin: dict[int, np.ndarray] = {}
     vcmd_per_bin: dict[int, float] = {}
     contact_traces_per_bin: dict[int, np.ndarray] = {}
+    force_traces_per_bin: dict[int, np.ndarray] = {}
     joint_vel_traces_per_bin: dict[int, np.ndarray] = {}
 
     robot_data = env.unwrapped.scene["robot"].data
@@ -138,6 +139,7 @@ def run(args: argparse.Namespace) -> int:
         prev_actions: torch.Tensor | None = None
         vx_trace = np.zeros((N, K), dtype=np.float32)
         contact_trace = np.zeros((N, K, n_feet), dtype=np.bool_)
+        force_trace = np.zeros((n_jt, K, n_feet), dtype=np.float32)
         joint_vel_trace = np.zeros((n_jt, K, n_joints), dtype=np.float32)
         contact_steps = torch.zeros(N, n_feet, device=device)
         touchdown_count = torch.zeros(N, n_feet, device=device)
@@ -171,6 +173,7 @@ def run(args: argparse.Namespace) -> int:
             forces = contact_sensor.data.net_forces_w[:, foot_indices_t, :].norm(dim=-1)
             in_contact = forces > 1.0
             contact_trace[:, step, :] = in_contact.detach().cpu().numpy()
+            force_trace[:, step, :] = forces[:n_jt].detach().cpu().numpy()
             jv = robot_data.joint_vel[:n_jt].detach().cpu().numpy()
             joint_vel_trace[:, step, :] = jv
             contact_steps[alive] += in_contact[alive].float()
@@ -260,6 +263,7 @@ def run(args: argparse.Namespace) -> int:
         traces_per_bin[b] = vx_trace
         vcmd_per_bin[b] = float(v)
         contact_traces_per_bin[b] = contact_trace
+        force_traces_per_bin[b] = force_trace
         joint_vel_traces_per_bin[b] = joint_vel_trace
 
         early_term = int((k_f < K - 1).sum())
@@ -279,6 +283,7 @@ def run(args: argparse.Namespace) -> int:
         save_dict[f"vx_b{b}"] = traces_per_bin[b]
         save_dict[f"vcmd_b{b}"] = np.array(vcmd_per_bin[b], dtype=np.float32)
         save_dict[f"contact_b{b}"] = contact_traces_per_bin[b]
+        save_dict[f"force_b{b}"] = force_traces_per_bin[b]
         save_dict[f"joint_vel_b{b}"] = joint_vel_traces_per_bin[b]
     save_dict["sim_dt"] = np.array(sim_dt, dtype=np.float32)
     save_dict["foot_names"] = np.array(foot_names)

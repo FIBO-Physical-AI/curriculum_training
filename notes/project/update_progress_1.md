@@ -203,35 +203,35 @@ EPTE-SP per (condition, seed, bin) is computed via the equation in the proposal,
 
 ### 2.3 Figures
 
-![Per-bin mean tracking reward versus PPO iteration, three seeds aggregated per condition.](../../src/results/figures/convergence.png)
+![Per-bin mean tracking reward versus PPO iteration, three seeds aggregated per condition.](../../src/results_update1/figures/convergence.png)
 
 *Figure 1: Per-bin mean tracking reward versus PPO iteration, three seeds aggregated per condition.*
 
-![EPTE-SP per velocity bin, mean over 3 seeds, error bars are min--max range across rollouts.](../../src/results/figures/epte_bars.png)
+![EPTE-SP per velocity bin, mean over 3 seeds, error bars are min--max range across rollouts.](../../src/results_update1/figures/epte_bars.png)
 
 *Figure 2: EPTE-SP per velocity bin, mean over 3 seeds, error bars are min--max range across rollouts.*
 
-![First PPO iteration at which the smoothed per-bin mean tracking reward crosses 0.7.](../../src/results/figures/iterations_to_mastery.png)
+![First PPO iteration at which the smoothed per-bin mean tracking reward crosses 0.7.](../../src/results_update1/figures/iterations_to_mastery.png)
 
 *Figure 3: First PPO iteration at which the smoothed per-bin mean tracking reward $r_{\text{lin}}$ crosses the mastery threshold $0.7$, per (condition, bin). Missing bars indicate the threshold was not crossed within the $6000$-iteration sweep.*
 
-![Survival curves and termination-cause breakdown.](../../src/results/figures/survival.png)
+![Survival curves and termination-cause breakdown.](../../src/results_update1/figures/survival.png)
 
 *Figure 4: Survival curves (top) and termination-cause breakdown (bottom), per (condition, bin).*
 
-![Achieved forward velocity versus commanded forward velocity at bin centers.](../../src/results/figures/v_actual_vs_cmd.png)
+![Achieved forward velocity versus commanded forward velocity at bin centers.](../../src/results_update1/figures/v_actual_vs_cmd.png)
 
 *Figure 5: Achieved forward velocity versus commanded forward velocity at bin centers.*
 
-![Task-sampling distribution as a function of PPO iteration.](../../src/results/figures/sampling_heatmap.png)
+![Task-sampling distribution as a function of PPO iteration.](../../src/results_update1/figures/sampling_heatmap.png)
 
 *Figure 6: Task-sampling distribution $c_j(\zeta)$ as a function of PPO iteration, per condition.*
 
-![Foot-contact patterns over a 3-second window per (condition, bin).](../../src/results/figures/gait_diagram.png)
+![Foot-contact patterns over a 3-second window per (condition, bin).](../../src/results_update1/figures/gait_diagram.png)
 
 *Figure 7: Foot-contact patterns over a 3-second window per (condition, bin), one rollout per cell. Filled = stance, empty = swing. FL/FR/RL/RR = front-left/front-right/rear-left/rear-right.*
 
-![Per-rollout action rate versus commanded velocity.](../../src/results/figures/action_rate.png)
+![Per-rollout action rate versus commanded velocity.](../../src/results_update1/figures/action_rate.png)
 
 *Figure 8: Per-rollout action rate $\overline{|a_t - a_{t-1}|}$ versus commanded velocity. Left: mean $\pm$ std across 300 rollouts per (condition, bin). Right: per-rollout distribution as box plots.*
 

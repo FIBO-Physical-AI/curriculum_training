@@ -19,16 +19,38 @@ from curriculum_rl.figures.plot_gait_classification import classify_gait
 
 _RAMP_RE = re.compile(r"ramp_([a-z_]+)_seed(\d+)")
 
-GAIT_BAND_COLORS: dict[str, str] = {
-    "Stand":     "#cbd5e1",
-    "Walk":      "#60a5fa",
-    "Trot":      "#fbbf24",
-    "Pace":      "#a78bfa",
-    "Bound":     "#ec4899",
-    "Pronk":     "#fb923c",
-    "Irregular": "#9ca3af",
-    "n/a":       "#e5e7eb",
-}
+def _band_color(label: str) -> str:
+    if label == "Stand":
+        return "#cbd5e1"
+    if label == "n/a":
+        return "#e5e7eb"
+    if label == "Irregular":
+        return "#9ca3af"
+    if "Pace" in label:
+        return "#a78bfa"
+    if label.startswith("Walk-LS") or label == "Amble":
+        return "#60a5fa"
+    if "Trot" in label:
+        return "#fbbf24"
+    if label.startswith("Walk-DS") or label == "DS-amble":
+        return "#34d399"
+    if label.startswith("LSLC"):
+        return "#93c5fd"
+    if label.startswith("LSDC"):
+        return "#fde68a"
+    if label.startswith("DSDC"):
+        return "#fcd34d"
+    if label.startswith("DSLC"):
+        return "#c4b5fd"
+    if label == "Bound" or "Half-bound" in label:
+        return "#ec4899"
+    if label == "Pronk":
+        return "#fb923c"
+    if "Canter" in label:
+        return "#f87171"
+    if "gallop" in label.lower():
+        return "#dc2626"
+    return "#e5e7eb"
 
 
 def _find_ramps(ramps_dir: Path) -> dict[str, Path]:
@@ -124,7 +146,7 @@ def plot_gait_transition(
         vcmd, vx, _ = ramp_data[cond]
 
         for gv_lo, gv_hi, gait in band_data[cond]:
-            color = GAIT_BAND_COLORS.get(gait, "#e5e7eb")
+            color = _band_color(gait)
             ax.axvspan(gv_lo, gv_hi, color=color, alpha=0.45, lw=0)
             if gait not in used_gaits:
                 used_gaits.append(gait)
@@ -144,7 +166,7 @@ def plot_gait_transition(
 
     axes[-1].set_xlabel("commanded velocity (m/s)")
 
-    handles = [Patch(facecolor=GAIT_BAND_COLORS.get(g, "#e5e7eb"),
+    handles = [Patch(facecolor=_band_color(g),
                      alpha=0.55, label=g) for g in used_gaits]
     fig.legend(handles=handles, loc="lower center",
                ncol=min(len(handles), 8), frameon=False,

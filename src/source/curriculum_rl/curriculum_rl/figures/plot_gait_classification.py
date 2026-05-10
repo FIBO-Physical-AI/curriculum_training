@@ -21,17 +21,87 @@ FOOT_COLORS = ["#dc2626", "#ea580c", "#2563eb", "#059669"]
 
 
 GAIT_TEMPLATES: dict[str, dict] = {
-    "Walk":  {"phases": [0.0, 0.5, 0.75, 0.25], "duty": 0.65},
-    "Trot":  {"phases": [0.0, 0.5, 0.5,  0.0],  "duty": 0.50},
-    "Pace":  {"phases": [0.0, 0.5, 0.0,  0.5],  "duty": 0.50},
-    "Bound": {"phases": [0.0, 0.0, 0.5,  0.5],  "duty": 0.40},
-    "Pronk": {"phases": [0.0, 0.0, 0.0,  0.0],  "duty": 0.30},
+    "Pace":                {"phases": [0.0, 0.5, 0.0,  0.5],  "duty": 0.50},
+    "Walk-LS":             {"phases": [0.0, 0.5, 0.75, 0.25], "duty": 0.65},
+    "Trot":                {"phases": [0.0, 0.5, 0.5,  0.0],  "duty": 0.50},
+    "Walk-DS":             {"phases": [0.0, 0.5, 0.25, 0.75], "duty": 0.65},
+    "Bound":               {"phases": [0.0, 0.0, 0.5,  0.5],  "duty": 0.40},
+    "Pronk":               {"phases": [0.0, 0.0, 0.0,  0.0],  "duty": 0.30},
+    "Half-bound-R":        {"phases": [0.0, 0.0, 0.55, 0.45], "duty": 0.40},
+    "Half-bound-L":        {"phases": [0.0, 0.0, 0.45, 0.55], "duty": 0.40},
+    "Canter-R":            {"phases": [0.0, 0.5, 0.4,  0.0],  "duty": 0.40},
+    "Canter-L":            {"phases": [0.0, 0.5, 0.0,  0.4],  "duty": 0.40},
+    "Transverse-gallop-R": {"phases": [0.0, 0.1, 0.6,  0.5],  "duty": 0.35},
+    "Transverse-gallop-L": {"phases": [0.0, 0.1, 0.5,  0.6],  "duty": 0.35},
+    "Rotary-gallop-R":     {"phases": [0.0, 0.1, 0.5,  0.6],  "duty": 0.35},
+    "Rotary-gallop-L":     {"phases": [0.0, 0.1, 0.6,  0.5],  "duty": 0.35},
 }
 
-PHASE_TOLERANCE = 0.10
+ASYMMETRIC_NAMES = [
+    "Bound", "Pronk",
+    "Half-bound-R", "Half-bound-L",
+    "Canter-R", "Canter-L",
+    "Transverse-gallop-R", "Transverse-gallop-L",
+    "Rotary-gallop-R", "Rotary-gallop-L",
+]
+
+CANONICAL_POINTS: list[tuple[str, float]] = [
+    ("Pace",    0.0),
+    ("Walk-LS", 0.25),
+    ("Trot",    0.5),
+    ("Walk-DS", 0.75),
+]
+
+QUADRANTS: list[tuple[str, float, float]] = [
+    ("LSLC", 0.0,  0.25),
+    ("LSDC", 0.25, 0.5),
+    ("DSDC", 0.5,  0.75),
+    ("DSLC", 0.75, 1.0),
+]
+
+ASYMMETRIC_LABEL_MAP: dict[str, str] = {
+    "Bound":               "Bound",
+    "Pronk":               "Pronk",
+    "Half-bound-R":        "Half-bound (R-lead)",
+    "Half-bound-L":        "Half-bound (L-lead)",
+    "Canter-R":            "Canter (R-lead)",
+    "Canter-L":            "Canter (L-lead)",
+    "Transverse-gallop-R": "Transverse gallop (R)",
+    "Transverse-gallop-L": "Transverse gallop (L)",
+    "Rotary-gallop-R":     "Rotary gallop (R)",
+    "Rotary-gallop-L":     "Rotary gallop (L)",
+}
+
+WALK_LABEL_MAP: dict[str, str] = {
+    "Pace":    "Pace (walking)",
+    "Walk-LS": "Walk-LS",
+    "Trot":    "Trot (walking)",
+    "Walk-DS": "Walk-DS",
+    "LSLC":    "LSLC walk",
+    "LSDC":    "LSDC walk",
+    "DSDC":    "DSDC walk",
+    "DSLC":    "DSLC walk",
+}
+
+RUN_LABEL_MAP: dict[str, str] = {
+    "Pace":    "Pace (running)",
+    "Walk-LS": "Amble",
+    "Trot":    "Trot (running, flying-trot)",
+    "Walk-DS": "DS-amble",
+    "LSLC":    "LSLC run",
+    "LSDC":    "LSDC run",
+    "DSDC":    "DSDC run",
+    "DSLC":    "DSLC run",
+}
+
 STAND_DUTY = 0.95
 MIN_STRIDE_STARTS = 2
 MAX_STRIDE_PERIOD = 50
+BETA_RUN_THRESHOLD = 0.50
+PHI_TOLERANCE = 0.10
+PHASE_TOLERANCE = PHI_TOLERANCE
+LR_ASYMMETRY_THRESHOLD = 0.20
+DAP_DISSOCIATION_THRESHOLD = 0.05
 
 
 def _stance_starts(mask: np.ndarray) -> np.ndarray:
@@ -84,99 +154,164 @@ def _cyclic_dist_max(a: np.ndarray, b: np.ndarray) -> float:
     return float(np.minimum(d, 1.0 - d).max())
 
 
+def _cyclic_diff_scalar(a: float, b: float) -> float:
+    d = abs(float(a) - float(b))
+    return min(d, 1.0 - d)
+
+
+def _circular_mean_pair(a: float, b: float) -> float:
+    angles = 2.0 * np.pi * np.asarray([a, b], dtype=float)
+    mean_angle = np.arctan2(np.sin(angles).mean(), np.cos(angles).mean())
+    return float((mean_angle / (2.0 * np.pi)) % 1.0)
+
+
 def _template_score(name: str, phases: np.ndarray, template: np.ndarray) -> float:
     if name == "Pronk":
         return _cyclic_dist_max(phases, template)
     return _cyclic_dist(phases, template)
 
 
-def classify_gait(contact: np.ndarray) -> str:
-    n_steps, n_feet = contact.shape
-    if n_feet < 4:
-        return "n/a"
-
-    fl, fr, rl, rr = contact[:, 0], contact[:, 1], contact[:, 2], contact[:, 3]
-    duty = float(contact.mean())
-
-    fl_starts = _stance_starts(fl)
-    fr_starts = _stance_starts(fr)
-    rl_starts = _stance_starts(rl)
-    rr_starts = _stance_starts(rr)
-
-    no_stride = all(
-        len(s) < MIN_STRIDE_STARTS
-        for s in (fl_starts, fr_starts, rl_starts, rr_starts)
-    )
-    if duty > STAND_DUTY or no_stride:
-        return "Stand"
-
-    if len(fl_starts) < MIN_STRIDE_STARTS:
-        return "n/a"
-    period = float(np.mean(np.diff(fl_starts)))
-    if period <= 0:
-        return "n/a"
-    if period > MAX_STRIDE_PERIOD:
-        return "Stand"
-
-    phases = np.array([
-        0.0,
-        _phase_offset_touchdown(fl_starts, fr_starts, period),
-        _phase_offset_touchdown(fl_starts, rl_starts, period),
-        _phase_offset_touchdown(fl_starts, rr_starts, period),
-    ])
-
-    scores = {
-        name: _template_score(name, phases, np.array(t["phases"]))
-        for name, t in GAIT_TEMPLATES.items()
-    }
-    best_name = min(scores, key=scores.get)
-    if scores[best_name] > PHASE_TOLERANCE:
-        return "Irregular"
-    return best_name
+def _lateral_phases(phases: np.ndarray) -> tuple[float, float]:
+    fl, fr, rl, rr = phases
+    phi_L = float((fl - rl) % 1.0)
+    phi_R = float((fr - rr) % 1.0)
+    return phi_L, phi_R
 
 
-def classify_gait_with_score(contact: np.ndarray) -> tuple[str, float]:
-    n_steps, n_feet = contact.shape
-    if n_feet < 4:
-        return "n/a", float("inf")
+def _dap_subtag(phi_L: float, phi_R: float) -> str:
+    dap_L = phi_L - 0.5
+    dap_R = phi_R - 0.5
+    if max(abs(dap_L), abs(dap_R)) < DAP_DISSOCIATION_THRESHOLD:
+        return ""
+    if dap_L > 0 and dap_R > 0:
+        return " +DAP"
+    if dap_L < 0 and dap_R < 0:
+        return " -DAP"
+    return " ±DAP"
 
-    fl = contact[:, 0]
-    duty = float(contact.mean())
-    fl_starts = _stance_starts(fl)
+
+def _beta_qualifier(beta: float, base: str) -> str:
+    return (WALK_LABEL_MAP if beta > BETA_RUN_THRESHOLD else RUN_LABEL_MAP)[base]
+
+
+def _symmetric_label(
+    phi_LH: float, beta: float, phi_L: float, phi_R: float,
+) -> tuple[str, str | None, float]:
+    nearest_name: str | None = None
+    nearest_dist = float("inf")
+    for name, point in CANONICAL_POINTS:
+        d = _cyclic_diff_scalar(phi_LH, point)
+        if d < nearest_dist:
+            nearest_dist = d
+            nearest_name = name
+
+    if nearest_dist <= PHI_TOLERANCE and nearest_name is not None:
+        label = _beta_qualifier(beta, nearest_name)
+        if nearest_name == "Trot":
+            label = label + _dap_subtag(phi_L, phi_R)
+        return label, nearest_name, nearest_dist
+
+    for q_name, lo, hi in QUADRANTS:
+        if lo < phi_LH < hi:
+            return _beta_qualifier(beta, q_name), None, nearest_dist
+    return "Irregular", None, nearest_dist
+
+
+def _asymmetric_label(phases: np.ndarray) -> tuple[str, str | None, float]:
+    best_name: str | None = None
+    best_score = float("inf")
+    for name in ASYMMETRIC_NAMES:
+        tmpl = np.asarray(GAIT_TEMPLATES[name]["phases"])
+        score = _template_score(name, phases, tmpl)
+        if score < best_score:
+            best_score = score
+            best_name = name
+    if best_score <= PHI_TOLERANCE and best_name is not None:
+        return ASYMMETRIC_LABEL_MAP[best_name], best_name, best_score
+    return "Irregular", best_name, best_score
+
+
+def _phase_tuple(contact: np.ndarray) -> tuple[np.ndarray | None, float]:
+    fl_starts = _stance_starts(contact[:, 0])
     fr_starts = _stance_starts(contact[:, 1])
     rl_starts = _stance_starts(contact[:, 2])
     rr_starts = _stance_starts(contact[:, 3])
-
-    no_stride = all(
-        len(s) < MIN_STRIDE_STARTS
-        for s in (fl_starts, fr_starts, rl_starts, rr_starts)
-    )
-    if duty > STAND_DUTY or no_stride:
-        return "Stand", 0.0
-
     if len(fl_starts) < MIN_STRIDE_STARTS:
-        return "n/a", float("inf")
+        return None, 0.0
     period = float(np.mean(np.diff(fl_starts)))
     if period <= 0:
-        return "n/a", float("inf")
-    if period > MAX_STRIDE_PERIOD:
-        return "Stand", 0.0
-
+        return None, 0.0
     phases = np.array([
         0.0,
         _phase_offset_touchdown(fl_starts, fr_starts, period),
         _phase_offset_touchdown(fl_starts, rl_starts, period),
         _phase_offset_touchdown(fl_starts, rr_starts, period),
     ])
-    scores = {
-        name: _template_score(name, phases, np.array(t["phases"]))
-        for name, t in GAIT_TEMPLATES.items()
+    return phases, period
+
+
+def classify_gait_2d(contact: np.ndarray) -> dict:
+    n_steps, n_feet = contact.shape
+    if n_feet < 4:
+        return {
+            "label": "n/a", "template_key": None, "score": float("inf"),
+            "phases": None, "phi_L": None, "phi_R": None,
+            "phi_LH": None, "beta": None, "dphi": None,
+        }
+
+    beta = float(contact.mean())
+    fl_starts = _stance_starts(contact[:, 0])
+    fr_starts = _stance_starts(contact[:, 1])
+    rl_starts = _stance_starts(contact[:, 2])
+    rr_starts = _stance_starts(contact[:, 3])
+    no_stride = all(
+        len(s) < MIN_STRIDE_STARTS
+        for s in (fl_starts, fr_starts, rl_starts, rr_starts)
+    )
+    if beta > STAND_DUTY or no_stride:
+        return {
+            "label": "Stand", "template_key": None, "score": 0.0,
+            "phases": None, "phi_L": None, "phi_R": None,
+            "phi_LH": None, "beta": beta, "dphi": None,
+        }
+
+    phases, period = _phase_tuple(contact)
+    if phases is None:
+        return {
+            "label": "n/a", "template_key": None, "score": float("inf"),
+            "phases": None, "phi_L": None, "phi_R": None,
+            "phi_LH": None, "beta": beta, "dphi": None,
+        }
+    if period > MAX_STRIDE_PERIOD:
+        return {
+            "label": "Stand", "template_key": None, "score": 0.0,
+            "phases": phases, "phi_L": None, "phi_R": None,
+            "phi_LH": None, "beta": beta, "dphi": None,
+        }
+
+    phi_L, phi_R = _lateral_phases(phases)
+    phi_LH = _circular_mean_pair(phi_L, phi_R)
+    dphi = _cyclic_diff_scalar(phi_L, phi_R)
+
+    if dphi >= LR_ASYMMETRY_THRESHOLD:
+        label, key, score = _asymmetric_label(phases)
+    else:
+        label, key, score = _symmetric_label(phi_LH, beta, phi_L, phi_R)
+
+    return {
+        "label": label, "template_key": key, "score": score,
+        "phases": phases, "phi_L": phi_L, "phi_R": phi_R,
+        "phi_LH": phi_LH, "beta": beta, "dphi": dphi,
     }
-    best_name = min(scores, key=scores.get)
-    best_score = scores[best_name]
-    if best_score > PHASE_TOLERANCE:
-        return "Irregular", best_score
-    return best_name, best_score
+
+
+def classify_gait(contact: np.ndarray) -> str:
+    return classify_gait_2d(contact)["label"]
+
+
+def classify_gait_with_score(contact: np.ndarray) -> tuple[str, float]:
+    res = classify_gait_2d(contact)
+    return res["label"], float(res["score"])
 
 
 def _find_traces(traces_dir: Path) -> dict[str, list[Path]]:
@@ -201,20 +336,32 @@ def _pick_rollout(contact: np.ndarray, vx: np.ndarray, v_cmd: float) -> int:
     return int(np.argmin(err))
 
 
-def _classify_majority(contact_all: np.ndarray) -> tuple[str, float]:
+def _classify_majority(
+    contact_all: np.ndarray,
+) -> tuple[str, float, str | None]:
     labels: list[str] = []
+    keys: list[str | None] = []
     score_by_label: dict[str, list[float]] = {}
     for i in range(contact_all.shape[0]):
         if not bool(contact_all[i].any()):
             continue
-        label, score = classify_gait_with_score(contact_all[i])
-        labels.append(label)
-        score_by_label.setdefault(label, []).append(score)
+        res = classify_gait_2d(contact_all[i])
+        labels.append(res["label"])
+        keys.append(res["template_key"])
+        score_by_label.setdefault(res["label"], []).append(float(res["score"]))
     if not labels:
-        return "n/a", float("inf")
+        return "n/a", float("inf"), None
     most, _ = Counter(labels).most_common(1)[0]
-    mean_score = float(np.mean(score_by_label[most])) if score_by_label.get(most) else float("inf")
-    return most, mean_score
+    mean_score = (
+        float(np.mean(score_by_label[most]))
+        if score_by_label.get(most) else float("inf")
+    )
+    rep_key: str | None = None
+    for lab, k in zip(labels, keys):
+        if lab == most and k is not None:
+            rep_key = k
+            break
+    return most, mean_score, rep_key
 
 
 def _draw_observed(ax, contact_window: np.ndarray, sim_dt: float) -> None:
@@ -237,9 +384,9 @@ def _draw_observed(ax, contact_window: np.ndarray, sim_dt: float) -> None:
                             color=FOOT_COLORS[foot_i], lw=0)
 
 
-def _draw_template(ax, gait: str, period_steps: float, fl_offset: int,
+def _draw_template(ax, template_key: str, period_steps: float, fl_offset: int,
                    n_show: int, sim_dt: float) -> None:
-    tmpl = GAIT_TEMPLATES.get(gait)
+    tmpl = GAIT_TEMPLATES.get(template_key)
     if tmpl is None or period_steps < 4.0:
         return
     duty_steps = tmpl["duty"] * period_steps
@@ -307,7 +454,7 @@ def plot_gait_classification(
             vx = z[key_vx]
             v_cmd = float(z[key_vc]) if key_vc in z.files else 0.0
             r = _pick_rollout(contact, vx, v_cmd)
-            gait, score = _classify_majority(contact)
+            gait, score, tmpl_key = _classify_majority(contact)
 
             n_show = min(int(t_window_s / sim_dt), contact.shape[1])
             window = contact[r, :n_show].astype(bool)
@@ -315,8 +462,8 @@ def plot_gait_classification(
             period_steps = _stride_period(fl_window)
             fl_offset = _first_stance(fl_window)
 
-            if score < PHASE_TOLERANCE and gait in GAIT_TEMPLATES:
-                _draw_template(ax, gait, period_steps, fl_offset, n_show, sim_dt)
+            if score < PHI_TOLERANCE and tmpl_key in GAIT_TEMPLATES:
+                _draw_template(ax, tmpl_key, period_steps, fl_offset, n_show, sim_dt)
             _draw_observed(ax, window, sim_dt)
 
             ax.set_xlim(0, t_window_s)
@@ -328,9 +475,9 @@ def plot_gait_classification(
                               fontsize=11, fontweight="bold",
                               color=CONDITION_COLOR.get(cond, "#111827"))
             if ri == 0:
-                ax.set_title(f"v={v_cmd:.2f} m/s\n{gait}", fontsize=10)
+                ax.set_title(f"v={v_cmd:.2f} m/s\n{gait}", fontsize=9)
             else:
-                ax.set_title(gait, fontsize=10)
+                ax.set_title(gait, fontsize=9)
             if ri == n_rows - 1:
                 ax.set_xlabel("t (s)", fontsize=9)
                 ax.tick_params(axis="x", labelsize=8)

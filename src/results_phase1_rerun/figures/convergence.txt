@@ -1,0 +1,26 @@
+cond             bin  reward_mean  reward_std   slope/iter  status
+------------------------------------------------------------------------
+uniform            0        0.896       0.001      0.00000  CONVERGED suboptimal
+task_specific      0        0.897       0.001      0.00001  CONVERGED suboptimal
+teacher            0        0.865       0.010      0.00007  CONVERGED suboptimal
+uniform            1        0.896       0.002      0.00001  CONVERGED suboptimal
+task_specific      1        0.898       0.001      0.00000  CONVERGED suboptimal
+teacher            1        0.866       0.010      0.00008  CONVERGED suboptimal
+uniform            2        0.896       0.002      0.00001  CONVERGED suboptimal
+task_specific      2        0.897       0.002      0.00001  CONVERGED suboptimal
+teacher            2        0.865       0.010      0.00008  CONVERGED suboptimal
+uniform            3        0.896       0.001      0.00000  CONVERGED suboptimal
+task_specific      3        0.898       0.002      0.00001  CONVERGED suboptimal
+teacher            3        0.865       0.010      0.00007  CONVERGED suboptimal
+uniform            4        0.896       0.001      0.00001  CONVERGED suboptimal
+task_specific      4        0.897       0.002      0.00001  CONVERGED suboptimal
+teacher            4        0.866       0.009      0.00007  CONVERGED suboptimal
+uniform            5        0.827       0.008     -0.00002  CONVERGED suboptimal
+task_specific      5        0.833       0.008      0.00004  CONVERGED suboptimal
+teacher            5        0.864       0.009      0.00006  CONVERGED suboptimal
+uniform            6        0.413       0.010     -0.00005  CONVERGED suboptimal
+task_specific      6        0.431       0.007      0.00003  CONVERGED suboptimal
+teacher            6        0.816       0.028     -0.00005  CONVERGED suboptimal
+uniform            7        0.387       0.007      0.00000  CONVERGED suboptimal
+task_specific      7        0.260       0.006     -0.00003  CONVERGED suboptimal
+teacher            7        0.713       0.029     -0.00001  CONVERGED suboptimal

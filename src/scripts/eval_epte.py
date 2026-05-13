@@ -116,6 +116,7 @@ def run(args: argparse.Namespace) -> int:
     contact_traces_per_bin: dict[int, np.ndarray] = {}
     force_traces_per_bin: dict[int, np.ndarray] = {}
     joint_vel_traces_per_bin: dict[int, np.ndarray] = {}
+    fall_steps_per_bin: dict[int, np.ndarray] = {}
 
     robot_data = env.unwrapped.scene["robot"].data
     joint_names = list(robot_data.joint_names)
@@ -265,6 +266,7 @@ def run(args: argparse.Namespace) -> int:
         contact_traces_per_bin[b] = contact_trace
         force_traces_per_bin[b] = force_trace
         joint_vel_traces_per_bin[b] = joint_vel_trace
+        fall_steps_per_bin[b] = k_f.detach().cpu().numpy().astype(np.int32)
 
         early_term = int((k_f < K - 1).sum())
         print(
@@ -285,6 +287,8 @@ def run(args: argparse.Namespace) -> int:
         save_dict[f"contact_b{b}"] = contact_traces_per_bin[b]
         save_dict[f"force_b{b}"] = force_traces_per_bin[b]
         save_dict[f"joint_vel_b{b}"] = joint_vel_traces_per_bin[b]
+        save_dict[f"fall_step_b{b}"] = fall_steps_per_bin[b]
+    save_dict["episode_steps"] = np.array(args.episode_steps, dtype=np.int32)
     save_dict["sim_dt"] = np.array(sim_dt, dtype=np.float32)
     save_dict["foot_names"] = np.array(foot_names)
     save_dict["joint_names"] = np.array(joint_names)

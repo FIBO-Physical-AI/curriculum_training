@@ -52,23 +52,30 @@ def _flatten_terrain(cfg) -> None:
 
 
 def _apply_liang_additive_energy(cfg) -> None:
+    phase = os.environ.get("SWEEP_PHASE", "2").strip()
     sigma_en_x = float(os.environ.get("SWEEP_SIGMA_EN_X", 1000.0))
     sigma_en_z = float(os.environ.get("SWEEP_SIGMA_EN_Z", 500.0))
-    track_std = float(os.environ.get("SWEEP_TRACK_STD", 0.5))
-    energy_weight = float(os.environ.get("SWEEP_ENERGY_WEIGHT", 1.0))
     cfg.rewards.track_lin_vel_xy.weight = 1.5
-    cfg.rewards.track_lin_vel_xy.params["std"] = track_std
     cfg.rewards.track_ang_vel_z.weight = 0.75
     cfg.rewards.action_rate.weight = -0.005
     cfg.rewards.joint_acc.weight = -1e-7
     cfg.rewards.joint_torques.weight = -2e-5
     cfg.rewards.joint_vel.weight = -1e-4
-    cfg.rewards.feet_air_time.weight = 0.0
-    cfg.rewards.air_time_variance.weight = 0.0
-    cfg.rewards.energy.func = energy_cot
-    cfg.rewards.energy.weight = energy_weight
-    cfg.rewards.energy.params = {"sigma_en_x": sigma_en_x, "sigma_en_z": sigma_en_z, "eps": 0.1}
     cfg.actions.JointPositionAction.scale = 0.35
+    if phase == "1":
+        track_std = float(os.environ.get("SWEEP_TRACK_STD", 0.5))
+        cfg.rewards.track_lin_vel_xy.params["std"] = track_std
+        cfg.rewards.feet_air_time.params["threshold"] = 0.1
+        cfg.rewards.energy.weight = 0.0
+    else:
+        track_std = float(os.environ.get("SWEEP_TRACK_STD", 0.5))
+        energy_weight = float(os.environ.get("SWEEP_ENERGY_WEIGHT", 1.0))
+        cfg.rewards.track_lin_vel_xy.params["std"] = track_std
+        cfg.rewards.feet_air_time.weight = 0.0
+        cfg.rewards.air_time_variance.weight = 0.0
+        cfg.rewards.energy.func = energy_cot
+        cfg.rewards.energy.weight = energy_weight
+        cfg.rewards.energy.params = {"sigma_en_x": sigma_en_x, "sigma_en_z": sigma_en_z, "eps": 0.1}
 
 
 def _apply_play_camera(cfg) -> None:

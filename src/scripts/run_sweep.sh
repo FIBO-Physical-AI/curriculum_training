@@ -5,10 +5,12 @@ trap '' HUP
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 cd "$PROJECT_ROOT"
-mkdir -p "$PROJECT_ROOT/src/results"
-SWEEP_LOG="$PROJECT_ROOT/src/results/sweep_output.log"
+RESULTS_DIR="${RESULTS_DIR:-$PROJECT_ROOT/src/results}"
+mkdir -p "$RESULTS_DIR"
+SWEEP_LOG="$RESULTS_DIR/sweep_output.log"
 exec > >(tee -a "$SWEEP_LOG") 2>&1
 echo "=== sweep script starting at $(date) — output captured to $SWEEP_LOG ==="
+echo "=== RESULTS_DIR = $RESULTS_DIR ==="
 
 CONDITIONS=(${CONDITIONS:-uniform task_specific teacher})
 SEEDS=(${SEEDS:-0})
@@ -22,7 +24,7 @@ RECORD_VIDEOS=${RECORD_VIDEOS:-1}
 STEPS_PER_ITER=${STEPS_PER_ITER:-48}
 export CURRICULUM_STEPS_PER_ITER="$STEPS_PER_ITER"
 
-TIMING_LOG="$PROJECT_ROOT/src/results/run_timings.txt"
+TIMING_LOG="$RESULTS_DIR/run_timings.txt"
 mkdir -p "$(dirname "$TIMING_LOG")"
 mkdir -p "$PROJECT_ROOT/.sweep_runs"
 : > "$TIMING_LOG"
@@ -64,7 +66,8 @@ for condition in "${CONDITIONS[@]}"; do
 
         exp_name="${EXP_NAME[$condition]}"
         exp_dir="$PROJECT_ROOT/unitree_rl_lab/logs/rsl_rl/$exp_name"
-        marker_file="$PROJECT_ROOT/.sweep_runs/${condition}_seed${seed}.path"
+        marker_file="$RESULTS_DIR/.sweep_runs/${condition}_seed${seed}.path"
+        mkdir -p "$RESULTS_DIR/.sweep_runs"
         latest=""
         if [ -d "$exp_dir" ]; then
             latest=$(ls -td "$exp_dir"/*/ 2>/dev/null | head -1)
@@ -78,6 +81,15 @@ for condition in "${CONDITIONS[@]}"; do
         echo "$latest" > "$marker_file"
         echo "  -> marker ${condition}_seed${seed}.path = $latest" | tee -a "$TIMING_LOG"
 
+        if [ -f "$latest/curriculum.csv" ]; then
+            mirror_dir="$RESULTS_DIR/curriculum_runs/${exp_name}/seed${seed}"
+            mkdir -p "$mirror_dir"
+            cp -f "$latest/curriculum.csv" "$mirror_dir/curriculum.csv"
+            echo "  -> mirrored curriculum.csv to $mirror_dir" | tee -a "$TIMING_LOG"
+        else
+            echo "  WARN: $latest/curriculum.csv not found — learning_curves/heatmap/ITM/convergence plots will skip" | tee -a "$TIMING_LOG"
+        fi
+
         ckpt=$(ls -t "${latest}"/model_*.pt 2>/dev/null | head -1)
         if [ -z "$ckpt" ]; then
             echo "FATAL: no model_*.pt checkpoint in $latest (${condition} seed=${seed})" >&2
@@ -89,12 +101,14 @@ for condition in "${CONDITIONS[@]}"; do
         eval_start=$(date +%s)
         echo "[EVAL_START] ${condition} seed=${seed}  at $(date '+%Y-%m-%d %H:%M:%S')" | tee -a "$TIMING_LOG"
         python src/scripts/eval_epte.py \
-            --condition "$condition" --seed "$seed" --checkpoint "$ckpt"
+            --condition "$condition" --seed "$seed" --checkpoint "$ckpt" \
+            --out-csv "$RESULTS_DIR/epte_sp.csv" \
+            --traces-dir "$RESULTS_DIR/eval_traces"
         eval_elapsed=$(( $(date +%s) - eval_start ))
         printf "[EVAL_STOP]  %s seed=%d  elapsed=%ds\n" "$condition" "$seed" "$eval_elapsed" \
             | tee -a "$TIMING_LOG"
 
-        if [ ! -s "$PROJECT_ROOT/src/results/epte_sp.csv" ]; then
+        if [ ! -s "$RESULTS_DIR/epte_sp.csv" ]; then
             echo "FATAL: eval_epte.py ran but epte_sp.csv is empty/missing for ${condition} seed=${seed}" >&2
             exit 1
         fi
@@ -113,7 +127,7 @@ for condition in "${CONDITIONS[@]}"; do
 
         bin_width=$(python -c "print($V_MAX / $NUM_BINS)")
         video_dir="$latest/videos/play"
-        push_dir="$PROJECT_ROOT/src/results/videos/${condition}_seed${seed}"
+        push_dir="$RESULTS_DIR/videos/${condition}_seed${seed}"
         mkdir -p "$push_dir"
 
         for B in $(seq 0 $((NUM_BINS-1))); do
@@ -156,7 +170,7 @@ echo "RAMP   best seed per condition (by bin-$((NUM_BINS-1)) tracking error)"
 echo "=========================================="
 TARGET_BIN=$((NUM_BINS-1))
 for condition in "${CONDITIONS[@]}"; do
-    if [ ! -s "$PROJECT_ROOT/src/results/epte_sp.csv" ]; then
+    if [ ! -s "$RESULTS_DIR/epte_sp.csv" ]; then
         echo "SKIP RAMP ${condition}: epte_sp.csv missing" >&2
         continue
     fi
@@ -171,14 +185,14 @@ for condition in "${CONDITIONS[@]}"; do
             }
             print best_seed
         }
-    ' "$PROJECT_ROOT/src/results/epte_sp.csv")
+    ' "$RESULTS_DIR/epte_sp.csv")
 
     if [ -z "$best_seed" ]; then
         echo "SKIP RAMP ${condition}: no rows for bin ${TARGET_BIN} in epte_sp.csv" >&2
         continue
     fi
 
-    marker_file="$PROJECT_ROOT/.sweep_runs/${condition}_seed${best_seed}.path"
+    marker_file="$RESULTS_DIR/.sweep_runs/${condition}_seed${best_seed}.path"
     if [ ! -f "$marker_file" ]; then
         echo "SKIP RAMP ${condition}: no marker $marker_file" >&2
         continue
@@ -195,19 +209,20 @@ for condition in "${CONDITIONS[@]}"; do
     ramp_start=$(date +%s)
     echo "[RAMP_START] ${condition} best_seed=${best_seed}  at $(date '+%Y-%m-%d %H:%M:%S')" | tee -a "$TIMING_LOG"
 
-    ramp_push_dir="$PROJECT_ROOT/src/results/videos/${condition}_seed${best_seed}"
+    ramp_push_dir="$RESULTS_DIR/videos/${condition}_seed${best_seed}"
     mkdir -p "$ramp_push_dir"
     ramp_video_args=()
     if [ "$RECORD_VIDEOS" = "1" ]; then
         ramp_video_args=(--video --video-dir "$ramp_push_dir")
     fi
 
-    rm -f "$PROJECT_ROOT/src/results/ramp_${condition}_seed"*.npz
+    rm -f "$RESULTS_DIR/ramp_${condition}_seed"*.npz
 
     python src/scripts/eval_ramp.py \
         --condition "$condition" \
         --seed "$best_seed" \
         --checkpoint "$ckpt" \
+        --out "$RESULTS_DIR/ramp_${condition}_seed${best_seed}.npz" \
         "${ramp_video_args[@]}"
     ramp_rc=$?
 
@@ -223,21 +238,33 @@ echo ""
 echo "=========================================="
 echo "PLOT   regenerating all figures"
 echo "=========================================="
-python src/scripts/plot_all.py
+if [ -d "$RESULTS_DIR/curriculum_runs" ]; then
+    PLOT_LOGS_ROOT="$RESULTS_DIR/curriculum_runs"
+else
+    PLOT_LOGS_ROOT="$PROJECT_ROOT/unitree_rl_lab/logs/rsl_rl"
+fi
+python src/scripts/plot_all.py \
+    --logs-root "$PLOT_LOGS_ROOT" \
+    --out-dir "$RESULTS_DIR/figures" \
+    --epte-csv "$RESULTS_DIR/epte_sp.csv" \
+    --traces-dir "$RESULTS_DIR/eval_traces" \
+    --ramps-dir "$RESULTS_DIR" \
+    --sigma-phase0-csv "$RESULTS_DIR/phase0_table.csv" \
+    --sigma-v4-csv "$RESULTS_DIR/sweep_v4.csv"
 
 echo ""
 echo "=========================================="
 echo "EPTE SUMMARY"
 echo "=========================================="
-if [ -s "$PROJECT_ROOT/src/results/epte_sp.csv" ]; then
+if [ -s "$RESULTS_DIR/epte_sp.csv" ]; then
     echo ""
     echo "--- mean EPTE per condition ---"
     awk -F, 'NR>1 {sum[$1]+=$7; n[$1]++} END {for (k in sum) printf "  %-15s %.3f  (n=%d)\n", k, sum[k]/n[k], n[k]}' \
-        "$PROJECT_ROOT/src/results/epte_sp.csv" | sort
+        "$RESULTS_DIR/epte_sp.csv" | sort
     echo ""
     echo "--- per-bin diagnostic (cond bin  fall  err  epte  v_act_signed  early/100) ---"
     awk -F, 'NR>1 {key=$1"|"$3; fall[key]+=$5; err[key]+=$6; epte[key]+=$7; vsig[key]+=$9; n[key]++; if($5<999)e[key]++} END {for(k in n){split(k,a,"|"); printf "  %-15s b%s  fall=%6.1f  err=%.3f  epte=%.3f  v_act=%+5.2f  early=%d/%d\n", a[1], a[2], fall[k]/n[k], err[k]/n[k], epte[k]/n[k], vsig[k]/n[k], e[k]+0, n[k]}}' \
-        "$PROJECT_ROOT/src/results/epte_sp.csv" | sort
+        "$RESULTS_DIR/epte_sp.csv" | sort
 else
     echo "  (no epte_sp.csv found)"
 fi
@@ -248,7 +275,7 @@ echo "CURRICULUM STATE (final weights per bin)"
 echo "=========================================="
 for condition in "${CONDITIONS[@]}"; do
     exp_name="${EXP_NAME[$condition]}"
-    marker_file="$PROJECT_ROOT/.sweep_runs/${condition}_seed${SEEDS[0]}.path"
+    marker_file="$RESULTS_DIR/.sweep_runs/${condition}_seed${SEEDS[0]}.path"
     if [ -f "$marker_file" ]; then
         run_dir=$(cat "$marker_file")
         curr_csv="$run_dir/curriculum.csv"
@@ -272,4 +299,4 @@ done
 
 echo ""
 echo ">>> sweep done. checkpoints + videos in unitree_rl_lab/logs/rsl_rl/*/"
-echo ">>> figures in src/results/figures/"
+echo ">>> figures in $RESULTS_DIR/figures/"

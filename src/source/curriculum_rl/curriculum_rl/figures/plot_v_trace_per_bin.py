@@ -62,15 +62,21 @@ def plot_v_trace_per_bin(
         for b in range(num_bins):
             ax = axes[b, ci]
             traces_concat = []
+            falls_concat = []
             v_cmd = None
             for fpath in files:
                 z = np.load(fpath)
                 key_vx = f"vx_b{b}"
                 key_vc = f"vcmd_b{b}"
+                key_fs = f"fall_step_b{b}"
                 if key_vx not in z.files:
                     continue
                 vx = z[key_vx]
                 traces_concat.append(vx)
+                if key_fs in z.files:
+                    falls_concat.append(z[key_fs])
+                else:
+                    falls_concat.append(np.full(vx.shape[0], vx.shape[1], dtype=np.int32))
                 if key_vc in z.files:
                     v_cmd = float(z[key_vc])
             if not traces_concat:
@@ -79,12 +85,16 @@ def plot_v_trace_per_bin(
                 ax.set_yticks([])
                 continue
             vx_all = np.concatenate(traces_concat, axis=0)
+            fall_all = np.concatenate(falls_concat, axis=0)
+            T = vx_all.shape[1]
+            mask = np.arange(T)[None, :] < fall_all[:, None]
+            vx_masked = np.where(mask, vx_all, np.nan)
             n_total = vx_all.shape[0]
             n_pick = min(n_rollouts_to_plot, n_total)
             idx = rng.choice(n_total, size=n_pick, replace=False)
             for j in idx:
-                ax.plot(vx_all[j], color=CONDITION_COLOR[cond], lw=0.8, alpha=0.55)
-            mean_trace = vx_all.mean(axis=0)
+                ax.plot(vx_masked[j], color=CONDITION_COLOR[cond], lw=0.8, alpha=0.55)
+            mean_trace = np.nanmean(vx_masked, axis=0)
             ax.plot(mean_trace, color=CONDITION_COLOR[cond], lw=1.6, alpha=1.0)
             if v_cmd is not None:
                 ax.axhline(v_cmd, color="#111827", lw=1.0, ls="--", alpha=0.7)

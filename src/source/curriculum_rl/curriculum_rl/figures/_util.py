@@ -103,17 +103,28 @@ def read_curriculum_csv(csv_path: Path) -> dict[str, np.ndarray]:
             "step": np.empty(0), "bin_idx": np.empty(0),
             "weight": np.empty(0), "mean_reward": np.empty(0),
             "r_lin": np.empty(0), "r_en": np.empty(0),
+            "n_samples": np.empty(0), "n_falls": np.empty(0),
+            "mean_ep_len": np.empty(0), "mean_vx_at_term": np.empty(0),
         }
     has_r_lin = "r_lin" in rows[0]
     has_r_en = "r_en" in rows[0]
+    has_n_samples = "n_samples" in rows[0]
+    has_n_falls = "n_falls" in rows[0]
+    has_ep_len = "mean_ep_len" in rows[0]
+    has_vx = "mean_vx_at_term" in rows[0]
     mean_reward = np.array([float(r["mean_reward"]) for r in rows])
+    n_rows = len(rows)
     return {
         "step": np.array([int(r["step"]) for r in rows]),
         "bin_idx": np.array([int(r["bin_idx"]) for r in rows]),
         "weight": np.array([float(r["weight"]) for r in rows]),
         "mean_reward": mean_reward,
         "r_lin": np.array([float(r["r_lin"]) for r in rows]) if has_r_lin else mean_reward.copy(),
-        "r_en": np.array([float(r["r_en"]) for r in rows]) if has_r_en else np.full(len(rows), np.nan),
+        "r_en": np.array([float(r["r_en"]) for r in rows]) if has_r_en else np.full(n_rows, np.nan),
+        "n_samples": np.array([int(r["n_samples"]) for r in rows]) if has_n_samples else np.zeros(n_rows, dtype=np.int64),
+        "n_falls": np.array([int(r["n_falls"]) for r in rows]) if has_n_falls else np.full(n_rows, -1, dtype=np.int64),
+        "mean_ep_len": np.array([float(r["mean_ep_len"]) for r in rows]) if has_ep_len else np.full(n_rows, np.nan),
+        "mean_vx_at_term": np.array([float(r["mean_vx_at_term"]) for r in rows]) if has_vx else np.full(n_rows, np.nan),
     }
 
 

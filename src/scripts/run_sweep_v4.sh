@@ -30,7 +30,8 @@ NUM_ENVS="${NUM_ENVS:-4096}"
 ROLLOUTS_PER_BIN="${ROLLOUTS_PER_BIN:-100}"
 RESUME="${RESUME:-0}"
 
-RESULTS_DIR="$PROJECT_ROOT/src/results"
+RESULTS_DIR="${RESULTS_DIR:-$PROJECT_ROOT/src/results}"
+export RESULTS_DIR
 SWEEP_LOG="$RESULTS_DIR/sweep_v4_output.log"
 TIMING_LOG="$RESULTS_DIR/sweep_v4_timings.txt"
 EXP_DIR="$PROJECT_ROOT/unitree_rl_lab/logs/rsl_rl/curriculum_go2_velocity_uniform"

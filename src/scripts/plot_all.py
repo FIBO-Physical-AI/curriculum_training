@@ -21,6 +21,10 @@ from curriculum_rl.figures.plot_v_trace_per_bin import plot_v_trace_per_bin
 from curriculum_rl.figures.plot_gait_classification import plot_gait_classification
 from curriculum_rl.figures.plot_grf import plot_grf
 from curriculum_rl.figures.plot_gait_transition import plot_gait_transition
+from curriculum_rl.figures.plot_eval_kernel_per_bin import plot_eval_kernel_per_bin
+from curriculum_rl.figures.plot_train_vs_eval_kernel import plot_train_vs_eval_kernel
+from curriculum_rl.figures.plot_sigma_phase0 import plot_sigma_phase0
+from curriculum_rl.figures.plot_sigma_phase_v4 import plot_sigma_phase_v4
 
 
 def build_argparser() -> argparse.ArgumentParser:
@@ -30,6 +34,8 @@ def build_argparser() -> argparse.ArgumentParser:
     parser.add_argument("--epte-csv", type=Path, default=Path("src/results/epte_sp.csv"))
     parser.add_argument("--traces-dir", type=Path, default=Path("src/results/eval_traces"))
     parser.add_argument("--ramps-dir", type=Path, default=Path("src/results"))
+    parser.add_argument("--sigma-phase0-csv", type=Path, default=Path("src/results/phase0_table.csv"))
+    parser.add_argument("--sigma-v4-csv", type=Path, default=Path("src/results/sweep_v4.csv"))
     parser.add_argument("--num-bins", type=int, default=8)
     parser.add_argument("--v-max", type=float, default=4.0)
     return parser
@@ -59,6 +65,10 @@ def main(argv: list[str] | None = None) -> int:
         ("gait_transition.png", lambda p: plot_gait_transition(args.ramps_dir, p)),
         ("survival.png", lambda p: plot_survival(args.epte_csv, p, num_bins=args.num_bins)),
         ("convergence.png", lambda p: plot_convergence(args.logs_root, p, num_bins=args.num_bins)),
+        ("eval_kernel_per_bin.png", lambda p: plot_eval_kernel_per_bin(args.traces_dir, p, num_bins=args.num_bins)),
+        ("train_vs_eval_kernel.png", lambda p: plot_train_vs_eval_kernel(args.traces_dir, args.logs_root, p, num_bins=args.num_bins)),
+        ("sigma_phase0.png", lambda p: plot_sigma_phase0(args.sigma_phase0_csv, p)),
+        ("sigma_phase_v4.png", lambda p: plot_sigma_phase_v4(args.sigma_v4_csv, p)),
     ]
 
     ok = 0

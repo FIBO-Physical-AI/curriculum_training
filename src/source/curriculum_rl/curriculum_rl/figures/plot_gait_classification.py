@@ -102,6 +102,7 @@ PHI_TOLERANCE = 0.10
 PHASE_TOLERANCE = PHI_TOLERANCE
 LR_ASYMMETRY_THRESHOLD = 0.20
 DAP_DISSOCIATION_THRESHOLD = 0.05
+MIN_ALIVE_STEPS_FOR_CLASSIFICATION = 50
 
 
 def _stance_starts(mask: np.ndarray) -> np.ndarray:
@@ -326,31 +327,37 @@ def _find_traces(traces_dir: Path) -> dict[str, list[Path]]:
     return out
 
 
-def _pick_rollout(contact: np.ndarray, vx: np.ndarray, v_cmd: float) -> int:
-    n_roll = contact.shape[0]
-    err = np.abs(vx.mean(axis=1) - v_cmd)
-    survives = np.array([bool(contact[i].any()) for i in range(n_roll)])
-    if survives.any():
-        idx = np.where(survives)[0]
-        return int(idx[np.argmin(err[idx])])
-    return int(np.argmin(err))
+def _pick_rollout(contact: np.ndarray, vx: np.ndarray, v_cmd: float, fall_step: np.ndarray) -> tuple[int, int]:
+    n_roll, n_steps, _ = contact.shape
+    long_enough = fall_step >= MIN_ALIVE_STEPS_FOR_CLASSIFICATION
+    if long_enough.any():
+        idx = np.where(long_enough)[0]
+        means = np.array([vx[i, :int(min(fall_step[i], n_steps))].mean() for i in idx])
+        err = np.abs(means - v_cmd)
+        winner = int(idx[np.argmin(err)])
+        return winner, int(min(fall_step[winner], n_steps))
+    longest = int(np.argmax(fall_step))
+    return longest, int(min(fall_step[longest], n_steps))
 
 
 def _classify_majority(
     contact_all: np.ndarray,
+    fall_step: np.ndarray,
 ) -> tuple[str, float, str | None]:
     labels: list[str] = []
     keys: list[str | None] = []
     score_by_label: dict[str, list[float]] = {}
+    n_steps = contact_all.shape[1]
     for i in range(contact_all.shape[0]):
-        if not bool(contact_all[i].any()):
+        alive = int(min(fall_step[i], n_steps))
+        if alive < MIN_ALIVE_STEPS_FOR_CLASSIFICATION:
             continue
-        res = classify_gait_2d(contact_all[i])
+        res = classify_gait_2d(contact_all[i, :alive])
         labels.append(res["label"])
         keys.append(res["template_key"])
         score_by_label.setdefault(res["label"], []).append(float(res["score"]))
     if not labels:
-        return "n/a", float("inf"), None
+        return "n/a (short episode)", float("inf"), None
     most, _ = Counter(labels).most_common(1)[0]
     mean_score = (
         float(np.mean(score_by_label[most]))
@@ -453,10 +460,24 @@ def plot_gait_classification(
             contact = z[key_c]
             vx = z[key_vx]
             v_cmd = float(z[key_vc]) if key_vc in z.files else 0.0
-            r = _pick_rollout(contact, vx, v_cmd)
-            gait, score, tmpl_key = _classify_majority(contact)
+            key_fs = f"fall_step_b{b}"
+            if key_fs in z.files:
+                fall = z[key_fs]
+            else:
+                fall = np.full(contact.shape[0], contact.shape[1], dtype=np.int32)
+            r, alive_steps = _pick_rollout(contact, vx, v_cmd, fall)
+            gait, score, tmpl_key = _classify_majority(contact, fall)
 
-            n_show = min(int(t_window_s / sim_dt), contact.shape[1])
+            if alive_steps < MIN_ALIVE_STEPS_FOR_CLASSIFICATION:
+                ax.text(0.5, 0.5, "n/a (short episode)", transform=ax.transAxes,
+                        ha="center", va="center", color="#9ca3af", fontsize=9)
+                ax.set_xticks([])
+                ax.set_yticks([])
+                if ri == 0:
+                    ax.set_title(f"v={v_cmd:.2f} m/s", fontsize=9)
+                continue
+
+            n_show = min(int(t_window_s / sim_dt), alive_steps)
             window = contact[r, :n_show].astype(bool)
             fl_window = window[:, 0]
             period_steps = _stride_period(fl_window)

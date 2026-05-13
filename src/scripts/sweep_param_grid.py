@@ -13,7 +13,7 @@ import numpy as np
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 LOG_ROOT = REPO_ROOT / "unitree_rl_lab" / "logs" / "rsl_rl" / "curriculum_go2_velocity_uniform"
-RESULTS_DIR = REPO_ROOT / "src" / "results"
+RESULTS_DIR = Path(os.environ.get("RESULTS_DIR", str(REPO_ROOT / "src" / "results")))
 SWEEP_CSV = RESULTS_DIR / "sweep_v4.csv"
 SWEEP_MD = RESULTS_DIR / "sweep_v4_comparison.md"
 FIGURES_DIR = RESULTS_DIR / "figures"

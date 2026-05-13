@@ -74,12 +74,20 @@ def plot_grf(
         for b in range(num_bins):
             ax = axes[b, ci]
             key = f"force_b{b}"
+            key_fs = f"fall_step_b{b}"
             all_forces = []
+            all_falls = []
             for fpath in files:
                 z = np.load(fpath)
                 if key not in z.files:
                     continue
-                all_forces.append(z[key])
+                f_arr = z[key]
+                all_forces.append(f_arr)
+                n_jt = f_arr.shape[0]
+                if key_fs in z.files:
+                    all_falls.append(z[key_fs][:n_jt])
+                else:
+                    all_falls.append(np.full(n_jt, f_arr.shape[1], dtype=np.int32))
 
             if not all_forces:
                 ax.text(0.5, 0.5, "n/a", transform=ax.transAxes,
@@ -89,9 +97,14 @@ def plot_grf(
                 continue
 
             forces = np.concatenate(all_forces, axis=0)
+            falls = np.concatenate(all_falls, axis=0)
             n_show = min(int(t_window_s / sim_dt), forces.shape[1])
             t = np.arange(n_show) * sim_dt
-            mean_f = forces[:, :n_show, :].mean(axis=0)
+            forces_win = forces[:, :n_show, :].astype(np.float32)
+            mask = np.arange(n_show)[None, :] < falls[:, None]
+            mask_b = np.broadcast_to(mask[:, :, None], forces_win.shape)
+            forces_masked = np.where(mask_b, forces_win, np.nan)
+            mean_f = np.nanmean(forces_masked, axis=0)
 
             for foot_i in range(mean_f.shape[1]):
                 ax.plot(t, mean_f[:, foot_i],

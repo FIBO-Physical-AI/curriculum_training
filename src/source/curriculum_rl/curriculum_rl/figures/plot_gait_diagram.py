@@ -32,22 +32,23 @@ def _find_traces(traces_dir: Path) -> dict[str, list[Path]]:
     return out
 
 
-def _pick_rollout(contact: np.ndarray, vx: np.ndarray, v_cmd: float) -> int:
+def _pick_rollout(contact: np.ndarray, vx: np.ndarray, v_cmd: float, fall_step: np.ndarray) -> tuple[int, int]:
     n_roll, n_steps, _ = contact.shape
-    survives = np.array([
-        bool(contact[i].any(axis=1).all()) or (vx[i].shape[0] == n_steps and np.isfinite(vx[i, -1]))
-        for i in range(n_roll)
-    ])
-    err = np.abs(vx.mean(axis=1) - v_cmd)
+    survives = fall_step >= n_steps
     if survives.any():
         idx = np.where(survives)[0]
-        return int(idx[np.argmin(err[idx])])
-    return int(np.argmin(err))
+        means = np.array([vx[i, :n_steps].mean() for i in idx])
+        err = np.abs(means - v_cmd)
+        winner = int(idx[np.argmin(err)])
+        return winner, int(fall_step[winner])
+    longest = int(np.argmax(fall_step))
+    return longest, int(fall_step[longest])
 
 
-def _draw_gait_strip(ax, contact_one: np.ndarray, color: str, sim_dt: float, t_window_s: float) -> None:
+def _draw_gait_strip(ax, contact_one: np.ndarray, color: str, sim_dt: float, t_window_s: float, fall_step: int) -> None:
     n_steps = contact_one.shape[0]
-    n_show = min(int(t_window_s / sim_dt), n_steps)
+    alive_steps = max(0, min(fall_step, n_steps))
+    n_show = min(int(t_window_s / sim_dt), alive_steps)
     c = contact_one[:n_show]
     t = np.arange(n_show) * sim_dt
 
@@ -66,7 +67,7 @@ def _draw_gait_strip(ax, contact_one: np.ndarray, color: str, sim_dt: float, t_w
                     color=color, lw=0,
                 )
 
-    ax.set_xlim(0, n_show * sim_dt)
+    ax.set_xlim(0, max(n_show, 1) * sim_dt)
     ax.set_ylim(-0.7, 3.7)
     ax.set_yticks([3, 2, 1, 0])
     ax.set_yticklabels(FOOT_LABELS, fontsize=7)
@@ -129,9 +130,20 @@ def plot_gait_diagram(
             contact = z0[key_c]
             vx = z0[key_vx]
             v_cmd = float(z0[key_vc]) if key_vc in z0.files else 0.0
+            key_fs = f"fall_step_b{b}"
+            if key_fs in z0.files:
+                fall = z0[key_fs]
+            else:
+                fall = np.full(contact.shape[0], contact.shape[1], dtype=np.int32)
 
-            r = _pick_rollout(contact, vx, v_cmd)
-            _draw_gait_strip(ax, contact[r], CONDITION_COLOR[cond], sim_dt, t_window_s)
+            r, alive_steps = _pick_rollout(contact, vx, v_cmd, fall)
+            if alive_steps < int(0.5 / sim_dt):
+                ax.text(0.5, 0.5, "n/a (short episode)", transform=ax.transAxes,
+                        ha="center", va="center", color="#9ca3af", fontsize=8)
+                ax.set_xticks([])
+                ax.set_yticks([])
+            else:
+                _draw_gait_strip(ax, contact[r], CONDITION_COLOR[cond], sim_dt, t_window_s, alive_steps)
 
             if ci == 0:
                 ax.set_ylabel(f"bin {b}\nv={v_cmd:.2f}", fontsize=8)

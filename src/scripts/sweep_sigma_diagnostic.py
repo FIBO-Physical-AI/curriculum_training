@@ -18,6 +18,17 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--num_envs", type=int, default=512)
 parser.add_argument("--num_steps", type=int, default=1000)
 parser.add_argument("--task", type=str, default="Curriculum-Go2-Velocity-Uniform")
+parser.add_argument(
+    "--out",
+    type=Path,
+    default=Path(os.environ.get("RESULTS_DIR", str(REPO_ROOT / "src" / "results"))) / "phase0_table.txt",
+)
+parser.add_argument(
+    "--csv",
+    type=Path,
+    default=None,
+    help="optional CSV companion file (defaults to <out>.csv)",
+)
 AppLauncher.add_app_launcher_args(parser)
 args_cli, _hydra_args = parser.parse_known_args()
 args_cli.headless = True
@@ -130,7 +141,7 @@ def main() -> int:
         sys.stdout.write(f"{s:>10}  {m:>10.3f}  {std:>9.3f}  {mn:>7.3f}  {mx:>7.3f}  {regime}\n")
     sys.stdout.flush()
 
-    out_path = REPO_ROOT / "src" / "results" / "phase0_table.txt"
+    out_path = args_cli.out
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with out_path.open("w") as f:
         f.write(f"mean power : {mean_power:.3f} W\n")
@@ -141,6 +152,14 @@ def main() -> int:
         for s, m, std, mn, mx, regime in summary_rows:
             f.write(f"{s:>10}  {m:>10.3f}  {std:>9.3f}  {mn:>7.3f}  {mx:>7.3f}  {regime}\n")
     print(f"[diag] table written to {out_path}", flush=True)
+
+    csv_path = args_cli.csv if args_cli.csv is not None else out_path.with_suffix(".csv")
+    csv_path.parent.mkdir(parents=True, exist_ok=True)
+    with csv_path.open("w") as f:
+        f.write("sigma_en_x,mean_r_en,std_r_en,min_r_en,max_r_en,regime\n")
+        for s, m, std, mn, mx, regime in summary_rows:
+            f.write(f"{s},{m:.6f},{std:.6f},{mn:.6f},{mx:.6f},{regime}\n")
+    print(f"[diag] csv written to {csv_path}", flush=True)
 
     print("[diag] closing env...", flush=True)
     try:

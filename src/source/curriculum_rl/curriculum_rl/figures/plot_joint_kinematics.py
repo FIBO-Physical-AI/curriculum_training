@@ -29,23 +29,32 @@ def _find_traces(traces_dir: Path) -> dict[str, list[Path]]:
     return out
 
 
-def _load_joint_vel(files: list[Path], bin_idx: int) -> tuple[np.ndarray | None, list[str], float]:
+def _load_joint_vel(files: list[Path], bin_idx: int) -> tuple[np.ndarray | None, np.ndarray | None, list[str], float]:
     stacks: list[np.ndarray] = []
+    fall_stacks: list[np.ndarray] = []
     joint_names: list[str] = []
     sim_dt = 0.02
     for fpath in files:
         z = np.load(fpath)
         key = f"joint_vel_b{bin_idx}"
+        key_fs = f"fall_step_b{bin_idx}"
         if key not in z.files:
             continue
-        stacks.append(z[key])
+        jv = z[key]
+        stacks.append(jv)
+        n_jt = jv.shape[0]
+        if key_fs in z.files:
+            fs = z[key_fs][:n_jt]
+        else:
+            fs = np.full(n_jt, jv.shape[1], dtype=np.int32)
+        fall_stacks.append(fs)
         if "joint_names" in z.files and not joint_names:
             joint_names = [str(n) for n in z["joint_names"]]
         if "sim_dt" in z.files:
             sim_dt = float(z["sim_dt"])
     if not stacks:
-        return None, joint_names, sim_dt
-    return np.concatenate(stacks, axis=0), joint_names, sim_dt
+        return None, None, joint_names, sim_dt
+    return np.concatenate(stacks, axis=0), np.concatenate(fall_stacks, axis=0), joint_names, sim_dt
 
 
 def plot_joint_kinematics(
@@ -58,17 +67,17 @@ def plot_joint_kinematics(
     if not cond_to_files:
         raise FileNotFoundError(f"no trace npz files found in {traces_dir}")
 
-    cond_data: dict[str, np.ndarray] = {}
+    cond_data: dict[str, tuple[np.ndarray, np.ndarray]] = {}
     joint_names: list[str] = []
     sim_dt = 0.02
     for cond in CONDITION_ORDER:
         files = cond_to_files.get(cond)
         if not files:
             continue
-        jv, jn, dt = _load_joint_vel(files, bin_idx)
+        jv, fs, jn, dt = _load_joint_vel(files, bin_idx)
         if jv is None:
             continue
-        cond_data[cond] = jv
+        cond_data[cond] = (jv, fs)
         sim_dt = dt
         if jn:
             joint_names = jn
@@ -79,7 +88,7 @@ def plot_joint_kinematics(
             "re-run eval_epte.py to log per-joint velocities"
         )
 
-    n_joints = next(iter(cond_data.values())).shape[2]
+    n_joints = next(iter(cond_data.values()))[0].shape[2]
     if not joint_names or len(joint_names) != n_joints:
         joint_names = [f"j{j}" for j in range(n_joints)]
 
@@ -98,20 +107,24 @@ def plot_joint_kinematics(
 
     for j in range(n_joints):
         for ci, cond in enumerate(cond_data):
-            jv = cond_data[cond][:, :, j]
-            t = np.arange(jv.shape[1]) * sim_dt
-            vel_mean = jv.mean(axis=0)
-            vel_std = jv.std(axis=0)
+            jv_full, fs = cond_data[cond]
+            jv = jv_full[:, :, j]
+            T = jv.shape[1]
+            t = np.arange(T) * sim_dt
+            mask = np.arange(T)[None, :] < fs[:, None]
+            jv_masked = np.where(mask, jv, np.nan)
+            vel_mean = np.nanmean(jv_masked, axis=0)
+            vel_std = np.nanstd(jv_masked, axis=0)
 
-            acc = np.diff(jv, axis=1) / sim_dt
+            acc = np.diff(jv_masked, axis=1) / sim_dt
             t_acc = t[1:]
-            acc_mean = acc.mean(axis=0)
-            acc_std = acc.std(axis=0)
+            acc_mean = np.nanmean(acc, axis=0)
+            acc_std = np.nanstd(acc, axis=0)
 
             jerk = np.diff(acc, axis=1) / sim_dt
             t_jerk = t[2:]
-            jerk_mean = jerk.mean(axis=0)
-            jerk_std = jerk.std(axis=0)
+            jerk_mean = np.nanmean(jerk, axis=0)
+            jerk_std = np.nanstd(jerk, axis=0)
 
             color = CONDITION_COLOR[cond]
             axes[j, 0].plot(t, vel_mean, color=color, lw=1.2, alpha=0.95)

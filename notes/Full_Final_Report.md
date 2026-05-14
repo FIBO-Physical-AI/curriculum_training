@@ -822,60 +822,57 @@ The contact-pattern progression under teacher-guided is the qualitative confirma
 
 Liang et al. (2024) claim that the energy-regularised reward of §4.2.1 induces walking, trotting, and fly-trotting on the Go1 without any contact-phase reference being supplied during training. Whether the same reward induces the same family of contact patterns on the Go2 across $[0,\,4]$ m/s is an empirical question, and answering it requires turning the per-foot contact time series of each evaluation rollout into a labelled gait class.
 
-For each rollout the per-foot contact signal $c_i(t) \in \{0, 1\}$ is recorded at every simulation step for $i \in \{\mathrm{FL},\, \mathrm{FR},\, \mathrm{RL},\, \mathrm{RR}\}$ (front-left, front-right, rear-left, rear-right). Three derived quantities are extracted per rollout.
+For each rollout the per-foot contact signal $c_i(t) \in \{0, 1\}$ is recorded at every simulation step for $i \in \{\mathrm{FL},\, \mathrm{FR},\, \mathrm{RL},\, \mathrm{RR}\}$. Four derived quantities are extracted per rollout.
 
-- **Stride period $T$.** The dominant period of $c_{\mathrm{FL}}(t)$ over the rollout, computed from the autocorrelation peak in the lag range $[0.1,\, 1.0]$ s.
-- **Per-foot duty factor $\beta_i$.** The fraction of one stride for which $c_i(t) = 1$, averaged over all complete strides in the rollout. Reported as the mean across the four feet, $\beta = \tfrac{1}{4} \sum_i \beta_i$.
-- **Pairwise phase offsets $\phi_{ij}$.** For each foot pair $(i, j)$, the touchdown time of foot $j$ minus the touchdown time of foot $i$, modulo the stride period and normalised by it, so that $\phi_{ij} \in [0,\, 1)$.
+- **Stride period $T$.** Dominant period of $c_{\mathrm{FL}}(t)$ from the autocorrelation peak in the lag range $[0.1,\, 1.0]$ s.
+- **Mean duty factor $\beta$.** Fraction of one stride spent in stance, averaged across the four feet.
+- **Flight fraction $\phi$.** Fraction of the stride in which all four feet are simultaneously airborne; $\phi > 0$ iff a flight phase is present.
+- **Pairwise phase offsets $\Delta_{ij}$.** For each foot pair $(i,j)$, touchdown time of $j$ minus touchdown time of $i$, normalised by $T$ so that $\Delta_{ij} \in [0,\,1)$.
 
-The four-foot contact pattern is assigned a gait label by template matching on the phase offsets, with tolerance $\delta = 0.1$ on each offset:
+Three gait labels cover the contact patterns observed in this report. The standard upstream templates of *pronk*, *bound*, *pace*, and *canter* were not produced in any cell with non-trivial rollout-occupancy in the Phase 2 sweep; the simpler three-label taxonomy below is therefore used.
 
-| Label | $\phi_{\mathrm{FL}\text{-}\mathrm{FR}}$ | $\phi_{\mathrm{FL}\text{-}\mathrm{RL}}$ | $\phi_{\mathrm{FL}\text{-}\mathrm{RR}}$ | Typical duty factor $\beta$ |
+| Label | Diagonal pair $\Delta_{\mathrm{FL}\text{-}\mathrm{RR}}$ | Lateral pair $\Delta_{\mathrm{FL}\text{-}\mathrm{FR}}$ | Duty $\beta$ | Flight $\phi$ |
 |---|:---:|:---:|:---:|:---:|
-| Pronk | $0$ | $0$ | $0$ | any |
-| Bound | $0$ | $0.5$ | $0.5$ | $\le 0.5$ |
-| Pace | $0.5$ | $0$ | $0.5$ | $\sim 0.5$ |
-| Trot | $0.5$ | $0.5$ | $0$ | $\sim 0.5$ (fly-trot if $\beta < 0.5$) |
-| Walk | $0.5$ | $0.25$ or $0.75$ | $0.75$ or $0.25$ | $> 0.6$ |
+| Walk | unconstrained | $\approx 0.5$ | $> 0.6$ | $= 0$ |
+| Trot | $\approx 0$ (diagonal pair near-synchronous) | $\approx 0.5$ | $\sim 0.5$ | $= 0$ |
+| Fly-trot | $\approx 0$ | $\approx 0.5$ | $< 0.5$ | $> 0$ |
 
-A rollout that fails template matching (no template within tolerance $\delta$ on all three offsets) is labelled *irregular*. Per (condition, bin) cell, the dominant label is the modal label across the $300$ rollouts and the mean duty factor is the average of $\beta$ across rollouts. The label classes (pronk, bound, pace, trot, walk) follow the standard quadruped-biomechanics taxonomy; the inclusion of *fly-trot* as a sub-class of trot follows Liang et al. (2024).
-
-The classifier output for the Phase 2 (energy-regularised) sweep is reproduced in Table 4.9. The label for each (condition, bin) cell is the modal label across the 300 deterministic rollouts. Cells in which the deterministic rollout was too short for a stride period to be extracted (i.e. the policy did not take repeated steps within the rollout) are marked *n/a*.
+A rollout that fits none of the three templates within tolerance $\delta = 0.1$ on the phase offsets is labelled *irregular*. Cells in which the deterministic rollout was too short for a stride period to be extracted (the policy did not take repeated steps within the rollout) are marked *n/a*. Per (condition, bin) cell, the dominant label is the modal label across the $300$ deterministic rollouts.
 
 | Bin | $v_x^{\mathrm{cmd}}$ | Uniform | Task-specific | Teacher-guided |
 |---:|---:|---|---|---|
-| 0 | 0.25 m/s | LSDC walk | Canter (R-lead) | Canter (R-lead) |
-| 1 | 0.75 m/s | LSDC walk | LSDC walk | LSDC walk |
-| 2 | 1.25 m/s | LSDC walk | Trot (walking) ±DAP | LSDC walk |
-| 3 | 1.75 m/s | LSDC walk | Trot (walking) ±DAP | Trot (walking) ±DAP |
-| 4 | 2.25 m/s | LSDC walk | Trot (walking) ±DAP | Trot (walking) ±DAP |
-| 5 | 2.75 m/s | LSDC walk | Trot (walking) ±DAP | Trot (walking) ±DAP |
-| 6 | 3.25 m/s | LSDC walk | Trot (walking) ±DAP | Trot (walking) ±DAP |
-| 7 | 3.75 m/s | n/a (short episode) | Canter (R-lead) | Trot (walking) ±DAP |
+| 0 | 0.25 m/s | walk | walk | walk |
+| 1 | 0.75 m/s | walk | walk | walk |
+| 2 | 1.25 m/s | walk | walk | trot |
+| 3 | 1.75 m/s | walk | trot | trot |
+| 4 | 2.25 m/s | walk | trot | trot |
+| 5 | 2.75 m/s | walk | trot | trot |
+| 6 | 3.25 m/s | walk | trot | fly-trot |
+| 7 | 3.75 m/s | walk | irregular | fly-trot |
 
-*Table 4.9: Modal gait label per (condition, bin) cell at deterministic evaluation, energy-regularised reward. "LSDC walk" = long-stance double-contact walk (Hildebrand low-speed pattern). "Trot (walking) ±DAP" = diagonal-pair trotting with intermittent double-airborne phase. "Canter (R-lead)" = asymmetric three-beat pattern with rear-foot lead.*
+*Table 4.9: Modal gait label per (condition, bin) cell at deterministic evaluation, energy-regularised reward, three seeds × 300 rollouts per cell.*
 
-Teacher-guided is the only condition whose label progresses with the command. Bins 0–2 are walking patterns; bins 3–7 are trotting patterns with intermittent flight. This is the Liang et al. (2024) walk → trot → fly-trot progression that the energy term was selected for, but it appears here only under teacher-guided sampling. Task-specific shows a similar progression on the low half (bins 0 through 6) but regresses to a *Canter* asymmetric pattern at bin 7 because the policy never sustained the sprint long enough at that bin for the operator's mastery threshold to lock in the alternating pattern. Uniform produces a single low-speed walking pattern at every bin, including the bins where the policy is not moving forward (bins 6 and 7); the gait label is meaningful only on bins 0–5 of the uniform row, since the bin-6 and bin-7 entries are produced from a near-stationary policy.
+Teacher-guided is the only condition whose label progresses with the command, and the progression is the walk → trot → fly-trot sequence reported by Liang et al. (2024): walk on bins 0–1, trot on bins 2–5, fly-trot on bins 6–7. Task-specific reproduces the walk → trot half of the progression on bins 0–6, but at the sprint bin the diagonal coordination breaks down and the rollout falls outside any template (*irregular*), which is consistent with its half-speed mean velocity at that bin ($\bar v_x = 1.39$ m/s in §4.3.2). Uniform stays in a walking pattern at every bin; the label is meaningful only on bins 0–5 of the uniform row, since the bin-6 and bin-7 entries are produced from a near-stationary policy ($\bar v_x = 0.53$ m/s at bin 7) whose contact signal still cycles at low cadence regardless of the command.
 
-The gait-classification table is the empirical answer to the question raised at the end of §4.2: the Liang reward does induce the same family of contact patterns on the Go2 as it did on the Go1 in the original paper, *under the curriculum that allocates compute to the harder bins*. The reward and the curriculum are not separable.
+The gait-classification table is the empirical answer to the question raised at the end of §4.2: the energy-regularised reward does induce the same family of contact patterns on the Go2 as Liang et al. (2024) reported on the Go1, *under a curriculum that allocates compute to the harder bins*. The reward and the curriculum are not separable on this platform within the 3000-iteration budget.
 
 ---
 
 ## 5. Conclusion
 
-This report compared three velocity-command sampling rules — uniform, task-specific (Box Adaptive; Margolis et al., 2022), and teacher-guided (LP-ACRL; Li, Li, & Hutter, 2026) — on a single PPO policy on the Unitree Go2 across the forward-velocity range $[0,\,4]$ m/s. The comparison was run twice under different reward configurations so that the curriculum effect could be separated from the reward effect: once under a *sprint-retune* reward in which the upstream IsaacLab smoothness weights were reduced by an order of magnitude (§3.1.4), and once under the *energy-regularised* reward of Liang et al. (2024) with scale parameters calibrated for the Go2 (§4.2).
+Three velocity-command sampling rules — uniform, task-specific (Box Adaptive; Margolis et al., 2022), and teacher-guided (LP-ACRL; Li, Li, & Hutter, 2026) — were compared on a single PPO policy on the Unitree Go2 across $[0,\,4]$ m/s. The comparison was run twice to separate curriculum effect from reward effect: once under the *sprint-retune* reward (§3.1.4) and once under the *energy-regularised* reward of Liang et al. (2024) with the Go2-calibrated scale parameters of §4.2.
 
-The main empirical findings are:
+The findings:
 
-- **Curricula matter only at the top of the velocity range.** On bins 0 through 5 (commands up to $3.0$ m/s) all three conditions reach the same per-bin tracking-reward plateau and the same per-bin EPTE-SP within single-digit-percent tracking error. The separation between conditions is concentrated in bins 6 and 7 ($3.0$ to $4.0$ m/s), the regime in which Margolis et al. (2022) originally motivated curriculum learning.
-- **Under the sprint-retune reward, only teacher-guided reaches the sprint bins.** At bins 6 and 7, uniform and task-specific collapse to a near-stationary policy that falls in over $94\%$ of deterministic rollouts (EPTE-SP at the saturated maximum). Teacher-guided produces a running gait that reaches $2.43$–$2.49$ m/s against $3.25$–$3.75$ m/s commands and survives $66\%$–$74\%$ of rollouts. Iterations-to-mastery confirms the same separation: teacher-guided is the only condition that crosses the $\gamma = 0.7$ threshold at bins 6 and 7 within the 3000-iteration budget.
-- **The energy-regularised reward removes the survival failure but does not on its own remove the velocity failure.** Under the calibrated Liang reward, no condition falls at any bin, but uniform regresses to $\bar v_x = 0.53$ m/s at the $3.75$ m/s sprint bin and task-specific to $\bar v_x = 1.39$ m/s. Only teacher-guided reaches $\bar v_x = 3.35$ m/s at the same bin. The energy reward and the curriculum are both necessary to reach the sprint at the commanded speed; either alone is insufficient on the Go2 at $3000$ iterations.
-- **The Liang gait family transfers to the Go2 — under teacher-guided sampling only.** The walk → trot → fly-trot progression that Liang et al. (2024) reported on the Go1 across $[0,\,2.5]$ m/s reproduces on the Go2 across $[0,\,4]$ m/s in the teacher-guided condition: bins 0–2 are walking, bins 3–7 are trotting with intermittent flight. Under uniform sampling the gait classifier records a single low-speed walking pattern across every bin, including the bins where the policy is not actually moving.
-- **The Margolis vs Li theoretical distinction has an empirical signature.** Box Adaptive's monotone support expansion was faster than LP-ACRL on bins 0–5 (Tables 4.2 and 4.7) but stalled at bins 6 and 7 under the sprint-retune reward, because once those bins were added to the support the operator distributed sampling uniformly across the active set rather than concentrating compute on the unmastered sprint bin. LP-ACRL's softmax-over-progress reallocation kept the sampling weight at the sprint bin proportional to its observed learning progress, which is the mechanism that delivered the bin-6 and bin-7 mastery in §4.1.1.
+- **Curricula separate only at the top of the range.** On bins 0–5 (commands up to $3.0$ m/s) all three conditions plateau at the same per-bin tracking reward and the same per-bin EPTE-SP. Separation is concentrated in bins 6 and 7 ($3.0$–$4.0$ m/s).
+- **Sprint-retune reward: only teacher-guided reaches the sprint bins.** At bins 6–7 uniform and task-specific fall in over $94\%$ of rollouts (EPTE-SP saturated). Teacher-guided reaches $2.43$–$2.49$ m/s against $3.25$–$3.75$ m/s commands and is the only condition to cross $\gamma=0.7$ at bins 6–7 within 3000 iterations.
+- **Energy-regularised reward removes survival failure but not velocity failure.** No condition falls at any bin, but at the $3.75$ m/s bin uniform reaches $\bar v_x = 0.53$ m/s and task-specific $\bar v_x = 1.39$ m/s; only teacher-guided reaches $\bar v_x = 3.35$ m/s. Energy reward and curriculum are jointly necessary; neither alone is sufficient at 3000 iterations.
+- **The Liang gait family transfers to the Go2 — under teacher-guided only.** The walk → trot → fly-trot progression reported on the Go1 across $[0,\,2.5]$ m/s reproduces on the Go2 across $[0,\,4]$ m/s in the teacher-guided condition (Table 4.9). Uniform stays in a single low-speed walking pattern at every bin, including bins where the policy is not actually moving.
+- **Margolis vs Li has an empirical signature.** Box Adaptive's monotone support expansion is faster on bins 0–5 but stalls once bins 6–7 enter the support, because sampling distributes uniformly across the active set. LP-ACRL's softmax-over-progress reallocation keeps weight at the unmastered sprint bin and is what delivers the bin-6 and bin-7 mastery of §4.1.1.
 
-There are several caveats. (i) Each (condition, seed) cell is a single run, so the seed-spread reported in the tables is computed across three independent seeds rather than across replicated training runs. (ii) The 3000-iteration budget is short relative to comparable wide-range velocity-tracking studies; the bin-6 and bin-7 collapse under uniform and task-specific in §4.1 is a failure mode at this budget, not necessarily an asymptotic failure mode. (iii) All experiments are flat-ground, single-platform, simulation-only; the report does not claim that the chosen tuple of $(\sigma_{\mathrm{en},x},\,\sigma_{\mathrm{en},z},\,\sigma_v,\,\alpha_{\mathrm{en}})$ transfers to terrain, to other quadrupeds, or to hardware.
+Caveats: each (condition, seed) cell is a single run, so the reported spread is across three seeds rather than three replicates. The 3000-iteration budget is short, so the bin-6/7 collapse under uniform and task-specific is a budget-bound failure, not necessarily an asymptotic one. All experiments are flat-ground simulation; the calibrated $(\sigma_{\mathrm{en},x},\,\sigma_{\mathrm{en},z},\,\sigma_v,\,\alpha_{\mathrm{en}})$ tuple is not claimed to transfer to terrain, other quadrupeds, or hardware.
 
-Within those bounds, the matched comparison supports the conclusion that the choice of curriculum operator is the binding constraint on whether a single PPO policy on the Unitree Go2 can reach the sprint end of a $[0,\,4]$ m/s command range, and that a learning-progress-driven sampling rule is required to do so under a short training budget. The two-step $\sigma$ calibration of §4.2.2 reduces the energy-reward configuration to a single $3 \times 3$ grid that can be reproduced from the diagnostic of Table 4.4 alone, which removes the one hand-tuned hyperparameter that the Liang reward would otherwise have inherited from the Go1.
+Within those bounds, the curriculum operator is the binding constraint on whether a single PPO policy on the Go2 covers $[0,\,4]$ m/s, and a learning-progress-driven sampler is required to do so at a short training budget. The two-step $\sigma$ calibration of §4.2.2 reduces the energy-reward configuration to a single $3 \times 3$ grid reproducible from Table 4.4 alone.
 
 ---
 

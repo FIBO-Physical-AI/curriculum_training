@@ -32,7 +32,7 @@ def _find_traces(traces_dir: Path) -> dict[str, list[Path]]:
     return out
 
 
-def _pick_rollout(contact: np.ndarray, vx: np.ndarray, v_cmd: float, fall_step: np.ndarray) -> tuple[int, int]:
+def _pick_rollout(contact: np.ndarray, vx: np.ndarray, v_cmd: float, fall_step: np.ndarray) -> tuple[int, int, float, float]:
     n_roll, n_steps, _ = contact.shape
     survives = fall_step >= n_steps
     if survives.any():
@@ -40,9 +40,46 @@ def _pick_rollout(contact: np.ndarray, vx: np.ndarray, v_cmd: float, fall_step: 
         means = np.array([vx[i, :n_steps].mean() for i in idx])
         err = np.abs(means - v_cmd)
         winner = int(idx[np.argmin(err)])
-        return winner, int(fall_step[winner])
+        return winner, int(fall_step[winner]), float(err.min()), float(means[np.argmin(err)])
     longest = int(np.argmax(fall_step))
-    return longest, int(fall_step[longest])
+    alive = int(fall_step[longest])
+    if alive > 0:
+        mean_vx = float(vx[longest, :alive].mean())
+    else:
+        mean_vx = 0.0
+    err = abs(mean_vx - v_cmd)
+    return longest, alive, err, mean_vx
+
+
+def _pick_seed_and_rollout(files: list[Path], bin_idx: int) -> tuple[Path, int, int, float, float] | None:
+    best: tuple[Path, int, int, float, float] | None = None
+    for path in files:
+        z = np.load(path)
+        key_c = f"contact_b{bin_idx}"
+        if key_c not in z.files:
+            continue
+        contact = z[key_c]
+        key_vx = f"vx_b{bin_idx}"
+        key_vc = f"vcmd_b{bin_idx}"
+        if key_vx not in z.files:
+            continue
+        vx = z[key_vx]
+        v_cmd = float(z[key_vc]) if key_vc in z.files else 0.0
+        key_fs = f"fall_step_b{bin_idx}"
+        if key_fs in z.files:
+            fall = z[key_fs]
+        else:
+            fall = np.full(contact.shape[0], contact.shape[1], dtype=np.int32)
+        r, alive, err, mean_vx = _pick_rollout(contact, vx, v_cmd, fall)
+        cand = (path, r, alive, err, mean_vx)
+        if best is None:
+            best = cand
+            continue
+        if alive > best[2]:
+            best = cand
+        elif alive == best[2] and err < best[3]:
+            best = cand
+    return best
 
 
 def _draw_gait_strip(ax, contact_one: np.ndarray, color: str, sim_dt: float, t_window_s: float, fall_step: int) -> None:
@@ -115,35 +152,28 @@ def plot_gait_diagram(
 
     for ci, cond in enumerate(conditions):
         files = cond_to_files[cond]
-        z0 = np.load(files[0])
         for b in range(num_bins):
             ax = axes[b, ci]
-            key_c = f"contact_b{b}"
-            key_vx = f"vx_b{b}"
-            key_vc = f"vcmd_b{b}"
-            if key_c not in z0.files:
+            best = _pick_seed_and_rollout(files, b)
+            v_cmd = 0.0
+            if best is None:
                 ax.text(0.5, 0.5, "n/a", transform=ax.transAxes,
                         ha="center", va="center", color="#9ca3af", fontsize=8)
                 ax.set_xticks([])
                 ax.set_yticks([])
-                continue
-            contact = z0[key_c]
-            vx = z0[key_vx]
-            v_cmd = float(z0[key_vc]) if key_vc in z0.files else 0.0
-            key_fs = f"fall_step_b{b}"
-            if key_fs in z0.files:
-                fall = z0[key_fs]
             else:
-                fall = np.full(contact.shape[0], contact.shape[1], dtype=np.int32)
-
-            r, alive_steps = _pick_rollout(contact, vx, v_cmd, fall)
-            if alive_steps < int(0.5 / sim_dt):
-                ax.text(0.5, 0.5, "n/a (short episode)", transform=ax.transAxes,
-                        ha="center", va="center", color="#9ca3af", fontsize=8)
-                ax.set_xticks([])
-                ax.set_yticks([])
-            else:
-                _draw_gait_strip(ax, contact[r], CONDITION_COLOR[cond], sim_dt, t_window_s, alive_steps)
+                path, r, alive_steps, _err, _mean_vx = best
+                z = np.load(path)
+                contact = z[f"contact_b{b}"]
+                key_vc = f"vcmd_b{b}"
+                v_cmd = float(z[key_vc]) if key_vc in z.files else 0.0
+                if alive_steps < int(0.5 / sim_dt):
+                    ax.text(0.5, 0.5, "n/a (short episode)", transform=ax.transAxes,
+                            ha="center", va="center", color="#9ca3af", fontsize=8)
+                    ax.set_xticks([])
+                    ax.set_yticks([])
+                else:
+                    _draw_gait_strip(ax, contact[r], CONDITION_COLOR[cond], sim_dt, t_window_s, alive_steps)
 
             if ci == 0:
                 ax.set_ylabel(f"bin {b}\nv={v_cmd:.2f}", fontsize=8)

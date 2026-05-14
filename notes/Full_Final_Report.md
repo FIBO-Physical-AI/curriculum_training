@@ -37,10 +37,19 @@
   - [3.3 Evaluation protocol](#33-evaluation-protocol)
   - [3.4 Hyperparameter summary](#34-hyperparameter-summary)
 - [4. Results](#4-results)
-  - [4.1 Phase 1: Three curricula under the sprint-retune reward](#41-phase-1-three-curricula-under-the-sprint-retune-reward)
+  - [4.1 Three curricula under the sprint-retune reward](#41-three-curricula-under-the-sprint-retune-reward)
     - [4.1.1 Per-bin tracking-reward convergence](#411-per-bin-tracking-reward-convergence)
     - [4.1.2 Per-bin EPTE-SP](#412-per-bin-epte-sp)
     - [4.1.3 Qualitative behaviour at evaluation](#413-qualitative-behaviour-at-evaluation)
+  - [4.2 From sprint-retune to energy regularisation](#42-from-sprint-retune-to-energy-regularisation)
+    - [4.2.1 The Liang energy-regularised reward](#421-the-liang-energy-regularised-reward)
+    - [4.2.2 Calibrating the energy scale](#422-calibrating-the-energy-scale)
+  - [4.3 Three curricula under the energy-regularised reward](#43-three-curricula-under-the-energy-regularised-reward)
+    - [4.3.1 Per-bin tracking-reward convergence](#431-per-bin-tracking-reward-convergence)
+    - [4.3.2 Per-bin EPTE-SP](#432-per-bin-epte-sp)
+    - [4.3.3 Qualitative behaviour at evaluation](#433-qualitative-behaviour-at-evaluation)
+    - [4.3.4 Gait classification](#434-gait-classification)
+- [5. Conclusion](#5-conclusion)
 - [References](#references)
 
 ---
@@ -304,9 +313,9 @@ This chapter specifies the concrete experimental setting under which the three c
 
 #### 3.1.1 Simulator, training budget, and parallelism
 
-All experiments are run in Isaac Lab on a single workstation with 2048 parallel environments collecting rollouts in lockstep. Each PPO update consumes a batch of 24 environment steps per env, and training runs for 6000 PPO iterations per (condition, seed). Three independent random seeds are drawn for every condition, so each curriculum is compared on three runs and reported statistics are taken across seeds.
+All experiments are run in Isaac Lab on a single workstation with 2048 parallel environments collecting rollouts in lockstep. Each PPO update consumes a batch of 24 environment steps per env, and training runs for 3000 PPO iterations per (condition, seed). Three independent random seeds are drawn for every condition, so each curriculum is compared on three runs and reported statistics are taken across seeds.
 
-The choice of 2048 parallel envs is empirical rather than theoretical: pilot timing on the same hardware showed that 4096 envs ran slower per iteration than 2048, opposite to what raw GPU throughput would predict. The cause was not isolated, so 2048 was kept for the sweep as the conservative choice. The choice of 6000 PPO iterations replaces an earlier 3000-iteration plan: at 3000 iterations the highest-speed bins had not converged for any condition, so the budget was doubled to give every (condition, bin) cell room to plateau within a single run.
+The choice of 2048 parallel envs is empirical rather than theoretical: pilot timing on the same hardware showed that 4096 envs ran slower per iteration than 2048, opposite to what raw GPU throughput would predict. The cause was not isolated, so 2048 was kept for the sweep as the conservative choice. The 3000-iteration budget is half of what a longer pilot run at 6000 iterations had used, and is short by the standard of comparable wide-range velocity-tracking studies. The choice is a wall-clock compromise: a three-condition, three-seed sweep at 3000 iterations occupies one GPU for roughly one day per reward configuration, and the experimental design of this report requires two such sweeps (one for the sprint-retune reward of §3.1.4, one for the energy-regularised reward of §4.2). Where the 3000-iteration budget visibly truncates a learning curve before it plateaus, this is flagged in §4.1 and §4.3.
 
 #### 3.1.2 Velocity command space
 
@@ -375,7 +384,7 @@ All three conditions share §3.1 exactly. They differ only in how the sampling d
 
 #### 3.2.1 Uniform (baseline)
 
-The sampling distribution is fixed at the uniform distribution over all eight bins for the full 6000 iterations:
+The sampling distribution is fixed at the uniform distribution over all eight bins for the full 3000 iterations:
 
 $$
 c_j(\zeta) = \frac{1}{N} = \frac{1}{8}, \quad j = 0, 1, \ldots, 7.
@@ -411,14 +420,12 @@ so that the final sampling distribution is $c_j = (1 - \varepsilon)\, \mathrm{so
 
 ### 3.3 Evaluation protocol
 
-After training, every policy is evaluated under deterministic action selection (mean of the policy Gaussian, no noise) on each of the eight bins independently. For each bin the policy is rolled out for a fixed number of episodes, and the following quantities are recorded:
+After training, every policy is evaluated under deterministic action selection (mean of the policy Gaussian, no noise) on each of the eight bins independently. For each bin the policy is rolled out for a fixed number of episodes. The unit of comparison is the per-bin pair (condition, bin). With 8 bins, 3 conditions, and 3 seeds, the sweep produces 72 per-bin evaluation cells in total. The following scalar quantities are recorded from each rollout.
 
 - **Per-bin tracking reward.** The episode-averaged value of $r_{\mathrm{lin}}$ in bin $j$, denoted $R_j$. Reported as the mean and standard deviation across the three seeds.
 - **EPTE-SP (Episodic Percentage Tracking Error with Stability Penalty).** Defined by Li et al. (2026, eq. 8). For a single rollout of length $T$ with commanded velocity $v^{\mathrm{cmd}}$ and measured forward velocity $v_x(t)$, the episodic tracking error percentage is the time-averaged absolute relative error, and the stability penalty adds a fixed penalty for any episode that terminates by falling. EPTE-SP is reported per bin (mean across seeds and across episodes).
 - **Sampling heatmap.** For each curriculum condition, the matrix $c_j(\mathrm{iter})$ giving the per-bin sampling probability at every PPO iteration is logged during training. The heatmap is the visual signature of how each operator allocates compute.
-- **Iterations-to-mastery.** For each (condition, bin) cell, the first PPO iteration at which the smoothed per-bin $R_j$ crosses $\gamma = 0.7$. Bins that never cross the threshold within the 6000-iteration budget are recorded as "not mastered." This is the metric on which Box Adaptive and LP-ACRL are scored against the uniform baseline at sprint commands.
-
-The unit of comparison is the per-bin pair (condition, bin). With 8 bins, 3 conditions, and 3 seeds, the sweep produces 72 per-bin evaluation cells in total.
+- **Iterations-to-mastery.** For each (condition, bin) cell, the first PPO iteration at which the smoothed per-bin $R_j$ crosses $\gamma = 0.7$. Bins that never cross the threshold within the 3000-iteration budget are recorded as "not mastered." This is the metric on which Box Adaptive and LP-ACRL are scored against the uniform baseline at sprint commands.
 
 ### 3.4 Hyperparameter summary
 
@@ -428,7 +435,7 @@ Table 3.2 collects every hyperparameter whose value matters for reproducibility.
 |---|---|---:|
 | Simulator | Parallel environments | $2048$ |
 | Simulator | Rollout length $T$ (env steps per PPO update) | $24$ |
-| Simulator | Total PPO iterations | $6000$ |
+| Simulator | Total PPO iterations | $3000$ |
 | Simulator | Seeds per condition | $3$ |
 | Command | Bins $N$, bin width $\Delta v$, $V_{\max}$ | $8$, $0.5$ m/s, $4.0$ m/s |
 | Command | Lateral and yaw command | $v_y^{\mathrm{cmd}} = 0$, $\omega_z^{\mathrm{cmd}} = 0$ |
@@ -459,128 +466,422 @@ Table 3.2 collects every hyperparameter whose value matters for reproducibility.
 
 ## 4. Results
 
-This chapter follows the experimental journey of the project in two phases. Section 4.1 reports the initial three-condition comparison under the sprint-retune reward configured in §3.1.4. Section 4.2 turns to the points in those results that did not match expectation, including the gait that the policy actually produced; that observation drives the reward redesign of §4.3. Section 4.4 reports the second comparison under the redesigned reward, and §4.5 discusses what the two phases together say about the relative contributions of curriculum and reward design. Section 4.6 concludes.
+Chapter 4 reports the matched comparison in two halves. §4.1 reports the three-condition comparison under the sprint-retune reward of §3.1.4. §4.2 introduces the energy-regularised reward of Liang et al. (2024) and the calibration procedure used to set its scale parameters on the Go2. §4.3 repeats the matched comparison of §4.1 under the energy-regularised reward.
 
-### 4.1 Phase 1: Three curricula under the sprint-retune reward
+### 4.1 Three curricula under the sprint-retune reward
 
-A three-condition (uniform, task-specific, teacher-guided) sweep with three independent seeds per condition was run to 6000 PPO iterations using exactly the configuration of §3.1. Nine training runs were completed, all returning exit code 0. Per-run wall-clock was between 57 and 87 minutes; total wall-clock was 13 h 1 m. Every policy was then evaluated under the deterministic protocol of §3.3, with 100 rollouts of 1000 steps per (condition, seed, bin) cell (300 rollouts per (condition, bin) cell after aggregating over seeds).
-
-The headline of this section is set up by one empirical pattern that turns out to do most of the work in explaining what follows: bins 0 through 5 transfer to each other, but bins 6 and 7 do not transfer from bins 0 through 5. Training on bin $b$ inside the lower group raises performance on bin $b+1$ in the same group, while no amount of training on bins 0 through 5 alone carries the policy onto bins 6 and 7. The boundary between the two groups sits between bin 5 ($[2.5, 3.0)$) and bin 6 ($[3.0, 3.5)$). The boundary itself is observed; its mechanism is not established in this section and is taken up in §4.2.
+A three-condition (uniform, task-specific, teacher-guided) sweep with three independent seeds per condition was run to $3000$ PPO iterations using exactly the configuration of §3.1. Every policy was then evaluated under the deterministic protocol of §3.3, with $100$ rollouts of $1000$ steps per (condition, seed, bin) cell ($300$ rollouts per (condition, bin) cell after aggregating over seeds).
 
 #### 4.1.1 Per-bin tracking-reward convergence
 
-Table 4.1 reports the per-bin mean tracking reward $\bar R$ and its across-seed standard deviation $\sigma$ at the end of training. A (condition, bin) cell is treated as converged when the linear-fit slope of the per-bin mean tracking reward over the final segment is below $1 \times 10^{-4}$ per iteration in absolute value, with $\sigma$ below $0.05$. The one cell that did not meet this criterion is marked with $\dagger$.
+Table 4.1 reports the smoothed per-bin tracking reward $R_j$ at the end of training, averaged across the three seeds. Numbers are taken from the last 200 PPO iterations of each run.
 
-| Bin | Uniform $\bar R$ | Uniform $\sigma$ | Task-specific $\bar R$ | Task-specific $\sigma$ | Teacher-guided $\bar R$ | Teacher-guided $\sigma$ |
-|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| 0 | $0.897$ | $0.002$ | $0.898$ | $0.002$ | $0.867$ | $0.016$ |
-| 1 | $0.897$ | $0.001$ | $0.898$ | $0.002$ | $0.875$ | $0.005$ |
-| 2 | $0.897$ | $0.001$ | $0.899$ | $0.001$ | $0.873$ | $0.008$ |
-| 3 | $0.897$ | $0.001$ | $0.898$ | $0.001$ | $0.874$ | $0.007$ |
-| 4 | $0.897$ | $0.002$ | $0.897$ | $0.002$ | $0.873$ | $0.012$ |
-| 5 | $0.827$ | $0.007$ | $0.796$ | $0.015$ | $0.869$ | $0.010$ |
-| 6 | $0.415$ | $0.010$ | $0.429$ | $0.018$ | $0.812^{\dagger}$ | $0.036$ |
-| 7 | $0.386$ | $0.008$ | $0.389$ | $0.008$ | $0.729$ | $0.015$ |
+| Bin | $v_x^{\mathrm{cmd}}$ | Uniform | Task-specific | Teacher-guided |
+|---:|---:|---:|---:|---:|
+| 0 | 0.25 m/s | $0.896 \pm 0.001$ | $0.897 \pm 0.001$ | $0.865 \pm 0.010$ |
+| 1 | 0.75 m/s | $0.896 \pm 0.002$ | $0.898 \pm 0.001$ | $0.866 \pm 0.010$ |
+| 2 | 1.25 m/s | $0.896 \pm 0.002$ | $0.897 \pm 0.002$ | $0.865 \pm 0.010$ |
+| 3 | 1.75 m/s | $0.896 \pm 0.001$ | $0.898 \pm 0.002$ | $0.865 \pm 0.010$ |
+| 4 | 2.25 m/s | $0.896 \pm 0.001$ | $0.897 \pm 0.002$ | $0.866 \pm 0.009$ |
+| 5 | 2.75 m/s | $0.827 \pm 0.008$ | $0.833 \pm 0.008$ | $0.864 \pm 0.009$ |
+| 6 | 3.25 m/s | $0.413 \pm 0.010$ | $0.431 \pm 0.007$ | $0.816 \pm 0.028$ |
+| 7 | 3.75 m/s | $0.387 \pm 0.007$ | $0.260 \pm 0.006$ | $0.713 \pm 0.029$ |
 
-*Table 4.1: Phase 1 per-bin mean tracking reward $\bar R$ and across-seed standard deviation $\sigma$, three seeds per condition. $\dagger$ indicates the cell did not satisfy the convergence criterion (still improving at end of budget).*
+*Table 4.1: Per-bin tracking reward $R_j$ at end of training, mean $\pm$ std across three seeds, sprint-retune reward of §3.1.4, 3000 PPO iterations per cell.*
 
-![Phase 1 per-bin mean tracking reward versus PPO iteration, three seeds aggregated per condition.](../src/results_update1/figures/convergence.png)
+For bins 0 through 4 (commands from $0$ to $2.5$ m/s), every condition saturates the per-bin tracking kernel at the same plateau and there is no separation between the three rules. The teacher-guided plateau is slightly lower (about $0.866$ vs $0.897$) because LP-ACRL keeps sampling unmastered bins, so the policy spends some of its capacity on bins not yet at the threshold and the trained policy's per-bin tracking on the low half is marginally noisier.
 
-*Figure 4.1: Per-bin mean tracking reward versus PPO iteration under the Phase 1 reward, three seeds aggregated per condition.*
+At bin 5 ($2.5$ to $3.0$ m/s) the three rules begin to separate: uniform and task-specific are around $0.83$, teacher-guided is at $0.86$.
 
-Reading the table and Figure 4.1 together raises four questions, each of which has a behavioural answer.
+At bins 6 and 7 ($3.0$ to $4.0$ m/s) the separation becomes large. Uniform and task-specific are stranded at $0.41$ and $0.39$ (respectively) at bin 6 and 7, with task-specific dropping further at bin 7 to $0.26$. Teacher-guided reaches $0.82$ at bin 6 and $0.71$ at bin 7, the only condition above the mastery threshold $\gamma = 0.7$ at the top of the velocity range. Figure 4.1 plots the per-bin learning curves under the sprint-retune reward. Uniform and task-specific stall in the first quarter of training at bin 7 and never recover; teacher-guided continues climbing through iteration 3000.
 
-**Why uniform tracks all the way to bin 5 even though it has no curriculum.** The proposal expected uniform to be the obvious laggard: with the sampling budget split equally across all eight bins, only $1/N = 12.5\%$ of compute reaches each bin, so each bin is trained on roughly $750$ effective iterations out of $6000$. The data does not show uniform lagging on bins 0 through 5. The reason is the transfer pattern observed above. Bins 0 through 5 form a contiguous group inside which adjacent-bin policy transfer is strong: a policy that tracks $1$ m/s already has most of what it needs to track $1.5$ m/s, so training on bin $b$ moves the policy on bin $b+1$ for free. Twelve-and-a-half percent of compute is plenty to polish a group of bins that transfer between adjacent members. The proposal's pessimism about uniform assumed each bin was an independent skill; on bins 0 through 5 they are not.
+![Per-bin tracking-reward learning curves, sprint-retune reward, three seeds per condition.](../src/results_phase1_rerun/figures/learning_curves_rlin.png)
 
-**Why uniform and task-specific plateau at a floor near $0.4$ on bins 6 and 7 instead of zero.** The collapsed evaluation rollouts show the policy falling within one second of the start of the episode (Figure 4.4 below) and producing achieved velocity $\le 0.2$ m/s against a $3$ m/s command (Figure 4.5). Substituting these numbers into $r_{\mathrm{lin}} = \exp(-\|v^{\mathrm{cmd}} - v\|^2 / \sigma_{\mathrm{lin}}^2)$ with $\sigma_{\mathrm{lin}} = 0.5$ m/s gives a per-step reward near zero, so a fallen policy should yield $\bar R \approx 0$ over the episode. Instead the table reports a stable $\bar R \approx 0.4$ across thousands of iterations. The discrepancy comes from how the training-time per-bin signal is collected versus how evaluation rollouts are scored. During training, the rolling per-bin buffer averages over stochastic-action episodes that resample their command every 20 simulated seconds, so the buffer integrates the brief seconds of forward motion before the fall and the occasional luckier sample where the action noise yielded an early plant; deterministic eval rollouts collapse immediately and average over a clean zero. The floor at $\sim 0.4$ is therefore a *training-buffer artefact*, not a sign that the policy is tracking; the eval data shows it is not. The implication is that an online per-bin reward signal at high speeds is unreliable as a learning indicator, which becomes relevant again when the same signal feeds the curriculum operators.
+*Figure 4.1: Per-bin tracking reward $R_j$ over training, sprint-retune reward. Bands are $\pm 1$ std across three seeds. Bottom-row bins are the ones that separate the three conditions.*
 
-**Why teacher-guided's curves are visibly less smooth than the others.** Uniform's curve on a given bin is the cleanest because exposure is constant at $12.5\%$ for the full 6000 iterations: the policy is being polished on that bin every iteration, so the rolling per-bin mean is a low-variance estimator. Task-specific's curves are flat-zero before a bin is unlocked, then climb smoothly once exposure jumps to between $14\%$ and $100\%$ depending on how many bins are active. Teacher-guided's exposure is non-stationary by design: when learning progress on bin $b$ is high, sampling mass concentrates there and the curve climbs steeply; when LP fades, mass collapses to the $\varepsilon/N \approx 1.9\%$ uniform floor and the curve barely moves until LP becomes nonzero again. This is most visible on bins 5, 6, and 7 of the teacher-guided panel of Figure 4.1, where each bin's curve has a distinct "fast climb followed by long plateau" shape. The roughness is not noise; it is the LP-driven softmax taking turns on the active bin.
+The 3000-iteration budget is short relative to standard practice in this literature (Margolis et al. (2022) trained at the equivalent of $\sim$ 12000 iterations on this scale of robot). The slope-at-end of every cell in Table 4.1 is at most $10^{-5}$ per iteration, including the bin-6 and bin-7 cells of uniform and task-specific, so the policies have stopped learning at this budget rather than merely being interrupted partway through. The bin-6 and bin-7 failure of uniform and task-specific is not a standing-still local optimum: at deterministic evaluation the policy attempts to walk at the commanded speed, lifts both right-side legs simultaneously and high, the chassis tilts, and the episode terminates before a stride completes.
 
-**Why teacher's bin 6 still reads $\dagger$ at end of training.** Bin 6 is the only cell in Table 4.1 not meeting the convergence criterion: the smoothed mean was still rising at iteration 6000. Bin 6 is also the first bin across the lower-group boundary, so teacher-guided's LP signal there stays nonzero longer than on any easier bin. The softmax keeps reallocating mass to bin 6 right up to the budget cut-off, and the cell ends as "still improving" rather than "plateaued." This is a budget question, not a curriculum failure; if the run had been extended, teacher's bin 6 would have continued climbing rather than dropping.
+The reason these two conditions fail at the sprint bins under the §3.1.4 reward is the design of the reward itself. The sprint-retune reward contains tracking, smoothness, and feet-air-time terms, but no contact-coordination term, no flight-phase term, and no power term. The policy therefore has to discover a stable sprint gait through exploration alone, and stable sprint at $3.5$–$4.0$ m/s requires a flight phase that cannot be reached by faster cycling of a walking gait. Discovering it is sample-hungry. Under uniform sampling each of the eight bins gets $1/8$ of the compute, which is not enough attempts at the sprint bins to stumble on a successful flight-phase trajectory within $3000$ iterations. Under task-specific sampling the sprint bins are added to the support only after the lower bins are mastered, and once added are sampled at the same probability as every other active bin, so by the time the operator opens bins 6 and 7 there are too few iterations left to discover the gait. Teacher-guided sampling, with the same reward, succeeds at bins 6 and 7 because the operator concentrates samples on bins where learning progress is detectable: as soon as the policy makes a small amount of headway at the sprint bins, those bins receive a larger share of the sampling distribution, and the policy stumbles on a successful flight-phase trajectory inside the same $3000$-iteration budget. The reward's missing contact-coordination term is therefore not patched by teacher-guided sampling; it is compensated for by allocating more attempts to the bins that need them. Uniform distributes equally, task-specific unlocks without focus, teacher-guided focuses. §4.2 patches the reward directly by adding the energy-regularised term of Liang et al. (2024), and §4.3 re-runs the comparison under the patched reward to separate the operator effect from the reward effect.
 
-A related observation in Figure 4.1: on bin 5, uniform and task-specific plateau slightly *below* teacher-guided ($0.827$ and $0.796$ versus $0.869$). This inverts the "uniform is highest on easy bins" pattern from bins 0 through 4 and is the first place where focused training visibly buys something. Bin 5 sits right next to the lower-group boundary, and the polish needed to push $\bar R$ from $0.8$ to $0.87$ requires more concentrated time on the bin than the unfocused $12.5\%$ uniform exposure can provide.
+The iterations-to-mastery metric (first iteration at which the smoothed $R_j$ crosses $\gamma = 0.7$, averaged across seeds where mastery occurs) is summarised in Table 4.2.
 
-![Phase 1 first PPO iteration at which the smoothed per-bin mean tracking reward crosses 0.7.](../src/results_update1/figures/iterations_to_mastery.png)
+| Bin | $v_x^{\mathrm{cmd}}$ | Uniform | Task-specific | Teacher-guided |
+|---:|---:|---:|---:|---:|
+| 0 | 0.25 | 44 | 31 | 33 |
+| 1 | 0.75 | 197 | 114 | 127 |
+| 2 | 1.25 | 233 | 167 | 221 |
+| 3 | 1.75 | 259 | 182 | 277 |
+| 4 | 2.25 | 483 | 191 | 338 |
+| 5 | 2.75 | 1251 | 290 | 427 |
+| 6 | 3.25 | not mastered (0/3) | not mastered (0/3)$^\ast$ | 455 (3/3) |
+| 7 | 3.75 | not mastered (0/3) | not mastered (0/3) | 747 (3/3) |
 
-*Figure 4.2: First PPO iteration at which the smoothed per-bin mean tracking reward $r_{\mathrm{lin}}$ crosses the mastery threshold $\gamma = 0.7$, per (condition, bin). Bars are missing where the threshold was not crossed within 6000 iterations.*
+*Table 4.2: Iterations-to-mastery per (condition, bin) cell, mean across the seeds where mastery was reached within 3000 PPO iterations. The fraction of seeds that reached mastery is shown in parentheses where it is below 3/3. $^\ast$One of three task-specific seeds crossed $\gamma$ at bin 6 at iteration 206 before regressing.*
 
-The iterations-to-mastery panel of Figure 4.2 shows the time at which each (condition, bin) cell first hit the threshold $\gamma = 0.7$. Uniform and task-specific are visually monotone: time-to-mastery grows with bin index, and bins 6 and 7 have no bar at all. Teacher-guided is not monotone. The bars for bins 5, 6, and 7 sit *to the left* of bin 4, meaning the curriculum crossed the threshold on the harder bins before crossing it on bin 4.
+Bins 0 through 5 are mastered by every condition. Task-specific reaches every one of these bins faster than uniform, because once a bin's mastery threshold is crossed, the support has already expanded to include it and the operator focuses sampling on the new edge. Teacher-guided is comparable to task-specific on the low half and the middle, and is the only condition that masters bins 6 and 7 within the 3000-iteration budget on every seed.
 
-This looks counterintuitive but follows directly from how teacher allocates compute. Bin 4 sits one step away from the well-trained bins 0 through 3 inside the same lower group, so adjacent-bin generalisation alone raises its $\bar R$ to near-plateau without bin 4 ever being the high-LP bin. Once bin 3 plateaus, teacher's softmax has to pick the next focus; bin 4 at that moment has a very small LP signal (already near plateau), while bins 5, 6, and 7 have large LP because they are climbing from zero. With $\beta = 0.05$, the softmax is winner-take-most, so it picks the highest-LP bin (bin 5) and bin 4 gets only the floor exposure of $\sim 1.9\%$ for the rest of training. The eventual moment when bin 4's smoothed mean crosses $0.7$ is therefore *not* the result of focused training on bin 4: it is the side effect of continued polish on the easier and harder neighbours leaking into bin 4 through the shared policy. The "late" mastery of bin 4 is what passive generalisation looks like under the teacher operator, not a failure of teacher to learn bin 4.
+![Iterations-to-mastery, sprint-retune reward. Bars truncated at 3000 indicate the bin was not mastered within the budget.](../src/results_phase1_rerun/figures/iterations_to_mastery.png)
+
+*Figure 4.2: Iterations-to-mastery per (condition, bin), sprint-retune reward. The teacher-guided pair of bars at bins 6–7 is the only data in those columns.*
+
+Figure 4.3 shows the per-bin sampling distribution $c_j(\mathrm{iter})$ as a heatmap. The three rows make the operator behaviour explicit: uniform is a flat $1/8$ across the eight bins for the full 3000 iterations; task-specific expands monotonically from bin 0 outward, with every newly-unlocked bin receiving the same probability as the bins below it; teacher-guided concentrates its mass on the bin with the highest current learning progress, which moves upward across the velocity range as the policy improves at each bin in turn.
+
+![Sampling heatmap per condition, sprint-retune reward.](../src/results_phase1_rerun/figures/sampling_heatmap.png)
+
+*Figure 4.3: Per-bin sampling probability $c_j(\mathrm{iter})$ over training, sprint-retune reward. Bin index on the vertical axis, PPO iteration on the horizontal axis, sampling probability on the colour scale.*
 
 #### 4.1.2 Per-bin EPTE-SP
 
-EPTE-SP (Episodic Percentage Tracking Error with Stability Penalty, Li et al. 2026 eq. 8) is the metric that the curriculum literature uses to score a learned controller across a velocity range. Two design features matter for how its numbers should be read:
+Table 4.3 reports the per-bin EPTE-SP from the deterministic evaluation rollouts of §3.3, together with the fraction of rollouts that terminated early by falling. EPTE-SP is bounded above at $1.0$ by construction; an EPTE-SP of $1.0$ together with a $100\%$ fall fraction indicates that the deterministic policy is not able to take a single survivable step under that command.
 
-1. The tracking-error part is the time-averaged *relative* tracking error, dividing the absolute velocity error by the commanded velocity. This penalises errors of fixed absolute size more harshly at low commands than at high commands.
-2. The stability part adds a fixed penalty when an episode terminates by falling rather than by time-out. The combined metric caps at $1.0$.
+| Bin | $v_x^{\mathrm{cmd}}$ | Uniform EPTE-SP / fall% | Task-specific EPTE-SP / fall% | Teacher EPTE-SP / fall% |
+|---:|---:|---:|---:|---:|
+| 0 | 0.25 | $0.413$ / $0\%$ | $0.441$ / $1\%$ | $0.322$ / $1\%$ |
+| 1 | 0.75 | $0.118$ / $0\%$ | $0.097$ / $0\%$ | $0.081$ / $0\%$ |
+| 2 | 1.25 | $0.087$ / $0\%$ | $0.080$ / $0\%$ | $0.051$ / $0\%$ |
+| 3 | 1.75 | $0.065$ / $0\%$ | $0.068$ / $0\%$ | $0.052$ / $0\%$ |
+| 4 | 2.25 | $0.069$ / $0\%$ | $0.074$ / $0\%$ | $0.059$ / $0\%$ |
+| 5 | 2.75 | $0.093$ / $3\%$ | $0.064$ / $0\%$ | $0.058$ / $0\%$ |
+| 6 | 3.25 | $0.946$ / $94\%$ | $1.000$ / $100\%$ | $0.310$ / $26\%$ |
+| 7 | 3.75 | $1.000$ / $100\%$ | $1.000$ / $100\%$ | $0.381$ / $34\%$ |
 
-So a cell value of $0.05$ means the policy is tracking the commanded velocity within roughly five percent of the command on average and surviving to time-out. A value at the cap $1.0$ means *either* the policy fell on most rollouts *or* the relative tracking error was massive *or* both; EPTE-SP cannot distinguish those failure modes by itself, which is why it is read alongside the survival and achieved-velocity figures.
+*Table 4.3: Per-bin EPTE-SP and fall fraction at deterministic evaluation, averaged across three seeds and 300 rollouts per cell, sprint-retune reward.*
 
-Table 4.2 reports EPTE-SP per (condition, bin), each cell being the mean over 300 rollouts.
+The story across bins 0 through 5 is consistent with Table 4.1: all three conditions track the command with single-digit-percent error and no falls. The bin-0 EPTE-SP values are high in absolute terms ($\sim 0.4$) because EPTE-SP is normalised by command magnitude, and a $0.1$ m/s tracking error at the $0.25$ m/s bin centre divides into a $40\%$ percentage error; this is an artifact of the normalisation, not a control failure (the mean measured forward velocity at bin 0 is $0.18$–$0.20$ m/s across all three conditions).
 
-| Bin (m/s) | Uniform | Task-specific | Teacher-guided |
-|---|:---:|:---:|:---:|
-| 0 $\;[0.0, 0.5)$ | $0.439$ | $0.312$ | $0.251$ |
-| 1 $\;[0.5, 1.0)$ | $0.120$ | $0.123$ | $0.095$ |
-| 2 $\;[1.0, 1.5)$ | $0.083$ | $0.076$ | $0.058$ |
-| 3 $\;[1.5, 2.0)$ | $0.063$ | $0.063$ | $0.056$ |
-| 4 $\;[2.0, 2.5)$ | $0.070$ | $0.066$ | $0.071$ |
-| 5 $\;[2.5, 3.0)$ | $0.178$ | $0.063$ | $0.073$ |
-| 6 $\;[3.0, 3.5)$ | $1.000$ | $0.779$ | $0.149$ |
-| 7 $\;[3.5, 4.0]$ | $1.000$ | $1.000$ | $0.383$ |
+The collapse at bins 6 and 7 mirrors the tracking-reward separation, but the fall column adds a qualitative distinction that the tracking reward alone hid. Uniform and task-specific do not produce a slowly-tracking policy at sprint commands; they produce a policy that *falls* on every rollout at bin 7. Task-specific falls $100\%$ even at bin 6, while uniform falls $94\%$. Teacher-guided is the only condition that takes survivable steps in either of the top two bins, with fall fractions of $26\%$ and $34\%$ respectively.
 
-*Table 4.2: Phase 1 mean EPTE-SP per (condition, bin); $n = 300$ rollouts per cell.*
+Figure 4.4 plots the per-bin mean forward velocity at evaluation against the command. At bins 6 and 7, uniform stops at $0.28$ m/s and $0.01$ m/s respectively against commands of $3.25$ and $3.75$ m/s, and task-specific stops at $0.19$ m/s and $0.05$ m/s. Both conditions have regressed to a near-standstill stance and then fall over. Teacher-guided reaches $2.49$ m/s and $2.43$ m/s in the same bins, which is below the commanded sprint speed but is a real running gait, and is recovered from after roughly two-thirds of the deterministic rollouts. The EPTE-SP separation between teacher-guided and the other two conditions at bins 6–7 is therefore driven by both factors: teacher-guided actually moves, and it falls less.
 
-![Phase 1 EPTE-SP per velocity bin, mean over 3 seeds.](../src/results_update1/figures/epte_bars.png)
+![Measured vs commanded forward velocity per bin, sprint-retune reward.](../src/results_phase1_rerun/figures/v_actual_vs_cmd.png)
 
-*Figure 4.3: EPTE-SP per velocity bin under the Phase 1 reward; bar height is the mean over three seeds, error bars span the min–max range across rollouts.*
+*Figure 4.4: Mean measured forward velocity vs commanded velocity, sprint-retune reward. Diagonal is the perfect-tracking reference. Uniform and task-specific points sit near $\bar v_x = 0$ at the top two bins.*
 
-Five behavioural readings of this table.
+![EPTE-SP per (condition, bin), sprint-retune reward.](../src/results_phase1_rerun/figures/epte_bars.png)
 
-**Why bin 0 is high for every condition.** On bins 1 through 4 all three conditions sit within $0.04$ of each other near $0.06$, the noise floor of the metric. Bin 0 jumps to $0.25$ through $0.44$ for the *same policies* that are tracking bins 1 through 4 cleanly. Two compounding mechanisms explain this. First, the centre of bin 0 is $v^{\mathrm{cmd}} = 0.25$ m/s; the normalisation in EPTE-SP divides absolute error by this small denominator, so an absolute error of $0.07$ m/s, which would read as a relative error of $0.05$ at bin 1 ($v^{\mathrm{cmd}} = 0.75$), reads as $0.28$ at bin 0. Second, a real quadruped cannot sustain a steady trot below some minimum stride rate; below that minimum the policy oscillates around the command instead of holding it cleanly, inflating the absolute error too. Both effects compound, so the easiest bin by command magnitude becomes the worst-tracking one by this metric. This is a property of the metric and of physics, not a learning failure.
-
-**Why bins 1 through 4 are basically tied across conditions.** All three conditions have reached the metric's noise floor on these bins. EPTE-SP at this level is reading "the policy survives and tracks within a few percent"; once every condition has reached that level, the metric cannot distinguish a faster-learning condition from a slower one. The sample-efficiency gap visible on iterations-to-mastery (Figure 4.2) has been erased by the end-of-training plateau. Reading curriculum benefit off the bin-1-to-4 rows of Table 4.2 is reading the wrong axis: the question this metric answers is "what is the terminal tracking quality?", and at the noise floor everyone is the same.
-
-**Why uniform separates from the two curricula at bin 5.** Uniform jumps from $0.063$ on bin 4 to $0.178$ on bin 5, while task-specific and teacher-guided stay near $0.07$. Uniform's survival rate on bin 5 dropped to $\sim 75\%$ (Figure 4.4), so the $\sim 25\%$ of rollouts that fall contribute a fall penalty to the metric, dragging the mean upward. Task-specific (95\% survival on bin 5) and teacher-guided (100\% on bin 5) avoid this contamination. Bin 5 is where the *unfocused* training time of uniform stops being sufficient to keep the policy upright on its own: bin 5 is the top bin of the lower group, and right at the boundary the policy needs the polish that focused curriculum training provides.
-
-**Why bins 6 and 7 saturate at $1.0$ for uniform and task-specific.** Both conditions are falling within the first second of the episode (Figure 4.4), so almost every rollout contributes the fall penalty; the absolute tracking error on the brief portion before the fall is also large (Figure 4.5 shows achieved $v_x \le 0.2$ against $v^{\mathrm{cmd}} \approx 3$ m/s, a relative error of $\sim 0.9$). Both ingredients of EPTE-SP are at their worst, so the metric pegs at its cap. Once the metric saturates, it cannot tell us *how* badly the two conditions failed; the eval-rollout figures are needed to see that the failure mode is "immediate fall," not "tracking but slowly."
-
-**Why teacher-guided keeps EPTE-SP below the cap on bins 6 and 7.** Teacher-guided's bin 6 reads $0.149$, very close to the lower-group noise floor; the contact-pattern panel for teacher-guided on bin 6 (Figure 4.7, §4.1.3) shows a continuous alternating contact pattern through the full episode. On bin 7 teacher-guided reads $0.383$, which is high relative to the noise floor but well below the cap. The bin-7 value comes from two compounding factors: roughly $33\%$ of teacher-guided's bin-7 rollouts still terminate by falling, contributing some fall penalty, and the achieved velocity is $\sim 2.3$ m/s against a $3.75$ m/s command, contributing a sustained relative error of $\sim 0.4$. Bin 7 for teacher is therefore "the policy is *attempting* the sprint without immediately falling, but not closing the gap to the command." Whether that gap can be closed by more training, by a different control behaviour, or whether it reflects a hardware ceiling for the Go2 is a question that Phase 1 cannot answer.
+*Figure 4.5: EPTE-SP per (condition, bin), sprint-retune reward. Saturated bars at bins 6–7 of uniform and task-specific correspond to the $100\%$-fall column of Table 4.3.*
 
 #### 4.1.3 Qualitative behaviour at evaluation
 
-The deterministic-action rollouts make the per-bin separation tangible in survival rate and achieved velocity. The patterns below are read from the survival, achieved-velocity, and sampling-heatmap figures and from the per-rollout records in the evaluation outputs.
+The visual signature of the sprint-retune reward depends on which bin is being evaluated. Two qualitatively different failure modes appear at the extremes of the velocity range and are visible in Figure 4.6.
 
-![Phase 1 survival curves and termination-cause breakdown, per (condition, bin).](../src/results_update1/figures/survival.png)
+![Per-foot stance/swing strips at deterministic evaluation, sprint-retune reward.](../src/results_phase1_rerun/figures/gait_diagram.png)
 
-*Figure 4.4: Survival curves (top) and termination-cause breakdown (bottom) per (condition, bin) under the Phase 1 reward.*
+*Figure 4.6: Gait diagram at deterministic evaluation, sprint-retune reward. Columns are conditions (uniform / task-specific / teacher-guided), rows are velocity bins. Coloured blocks mark stance (foot in contact); white gaps mark swing. Per cell the plotted rollout is the best-surviving rollout across the three seeds, with ties broken by closest mean forward velocity to the command. "n/a (short episode)" cells are bins where the best rollout terminated before half a second.*
 
-![Phase 1 achieved forward velocity versus commanded forward velocity at bin centres.](../src/results_update1/figures/v_actual_vs_cmd.png)
+Two qualitatively different problems appear at the extremes of the velocity range, and both are visible under all three conditions in some form.
 
-*Figure 4.5: Achieved forward velocity versus commanded forward velocity at bin centres under the Phase 1 reward.*
+**Low bins: reward hacking on three legs.** At $v_x^{\mathrm{cmd}} = 0.25$ m/s, Figure 4.6 shows one of the four foot strips empty for the entire window while the other three cycle through stance and swing, under every one of the three conditions (uniform, task-specific, and teacher-guided). The policy still meets the commanded forward velocity, so the tracking term $r_{\mathrm{lin}}$ scores well, and the three legs in contact are enough to keep the chassis upright over the short evaluation rollout. The video shows the same pattern: one leg up the entire rollout, the other three carrying the body forward at low speed. This is a reward hack, not a learning failure. The policy found that the §3.1.4 reward does not penalise it for holding a leg out of the gait cycle.
 
-**Bins 0 through 4: a single group, comparable across conditions.** All three conditions complete the 20-second episode at $\ge 95\%$ survival rate; achieved velocity matches commanded velocity along the $y = x$ diagonal of Figure 4.5. The underlying behaviour is the same across conditions on these bins because the underlying contact pattern is the same: a continuous alternating-foot pattern at varying stepping frequency. Adjacent-bin policy transfer is enough to bring every condition to a comparable end state.
+**High bins: failure to learn under uniform and task-specific.** At $v_x^{\mathrm{cmd}} \ge 3.0$ m/s under uniform and task-specific, Figure 4.6 shows the rollout terminating early; the corresponding bin-6 and bin-7 cells in those two columns are either short stance/swing fragments or marked "n/a (short episode)". The video shows the same outcome: at deterministic evaluation the policy lifts both right-side legs simultaneously and high, the chassis tilts, and the episode terminates before a stride completes (cf. the $94$–$100\%$ fall column of Table 4.3). This is not a reward hack; it is a learning failure within the $3000$-iteration budget at these bins. The teacher-guided column at the same bins shows all four feet cycling through stance and swing for the full evaluation window, so the high-bin failure is specific to the operators that under-sample the sprint bins, not to the reward. The classified gait labels are reported separately in §4.3.4; §4.1.3 stays at the level of what is directly readable from the gait diagram.
 
-**Bin 5: the lower-group boundary starts to bite.** Uniform survival drops to $\sim 75\%$; the dominant termination cause on the failing rollouts is the orientation limit (the robot rolls over and falls). Task-specific holds $\sim 95\%$ survival, teacher-guided holds $100\%$. Bin 5 ($[2.5, 3.0)$) sits right at the high end of the lower group: at $2.75$ m/s the policy is near the limit of how fast the contact pattern it is using can support before qualitatively different behaviour would be required. Uniform's $12.5\%$ unfocused exposure leaves the policy *near* the limit but not robustly inside it, so a quarter of rollouts cross into the unstable margin and fall. The two curricula give bin 5 more polish (task-specific via the post-mastery uniform exposure on unlocked bins, teacher-guided via the LP-driven concentration before bin 5 plateaus), and that extra polish is the difference between staying upright and not.
+**Why the §3.1.4 reward allows the low-bin hack.** The tracking term $r_{\mathrm{lin}}$ scores forward velocity indifferent to how that velocity is generated. The feet-air-time bonus (Table 3.2: threshold $0.1$ s) is the only term in §3.1.4 designed to shape the contact pattern, but it scores each foot independently. A foot held permanently airborne satisfies its per-foot bonus trivially, and the remaining three feet satisfy theirs by completing normal stance/swing cycles. With nothing in the reward depending on the coordination *between* feet, the three-legged pattern scores as well as a four-foot walk, and the policy lands on whichever contact pattern is gradient-cheapest to reach for the commanded speed. The same absence of contact-coordination is why uniform and task-specific never escape the high-bin failure either: the reward gives no gradient signal that "lift one diagonal pair, lift one lateral pair, alternate" is the right contact structure for sprint, so the only way for those operators to find a stable sprint gait is to stumble on it by exploration, which neither of them does within $3000$ iterations.
 
-**Bins 6 and 7: across the boundary.** Uniform and task-specific terminate within one second of the start of the episode on bin 6 and within half a second on bin 7. The contact diagram is empty for the remainder of the rollout window because the rollout is over; the rollout records confirm the policy fell. Teacher-guided keeps a continuous alternating contact pattern through the full 20 seconds on bin 6, and on bin 7 survives $\sim 67\%$ of rollouts to time-out. The behavioural difference is not "teacher's behaviour is faster than uniform's"; it is "teacher's policy is *attempting the commanded velocity* while uniform's policy on the same command is *not moving forward at all*." Figure 4.5 makes this explicit: uniform and task-specific drop off the diagonal at $v_x^{\mathrm{cmd}} \approx 2.25$ m/s and end near zero achieved velocity at $v_x^{\mathrm{cmd}} = 3.75$ m/s. Teacher-guided continues along the diagonal up through bin 6 and reaches $\sim 2.3$ m/s at the bin-7 centre.
+**Deployment implication.** The project goal is a single PPO policy that tracks forward-velocity commands across $[0,\,4]$ m/s. The sprint-retune reward fails this goal at both ends of the range: every condition hacks the gait at low bins (cannot be deployed in the real because hardware on three legs is not what a customer-facing locomotion policy should produce), and uniform and task-specific cannot reach the sprint bins at all. Even teacher-guided, which reaches the sprint bins, still produces the three-legged hack at low bins, so the curriculum alone does not rescue the low-bin failure. A different reward shape is needed; §4.2 introduces one in which the contact coordination between feet enters the reward through an energy-cost-of-transport term.
 
-The mechanism behind this asymmetry is concentrated training time near the boundary. Bins 6 and 7 require qualitatively different behaviour from bins 0 through 5; the policy cannot reach this behaviour by polishing what already works because the new behaviour is not in the neighbourhood of the lower-group policy in joint-target space. To learn it the policy needs many gradient steps where the command is itself in the upper group, and only teacher-guided's LP-driven sampling provides that concentration: as bins 0 through 5 plateau, teacher's softmax mass redistributes onto bins 5 and 6 first, then onto 7 as 6 plateaus. Uniform never gives bin 7 more than $12.5\%$ of compute, and task-specific dilutes its bin-7 exposure across all unlocked bins (which by end of training is all eight, since bin 7 only just unlocks). Neither accumulates enough concentrated upper-group-command time to escape the absorbing minimum of "fall when the command is too fast."
+### 4.2 From sprint-retune to energy regularisation
 
-![Phase 1 task-sampling distribution as a function of PPO iteration, per condition.](../src/results_update1/figures/sampling_heatmap.png)
+The reward term added to fix the §4.1.3 observation has to depend on the relative timing of foot contacts. Liang et al. (2024) report that a single energy-regularised term, added to a tracking objective, causes the policy to autonomously transition between walking, trotting, and fly-trotting as the command rises, without any contact-phase reference being supplied during training. The term depends on contact timing indirectly: it penalises mechanical power normalised by command magnitude, and the four-foot bound carries a higher power cost per unit of forward motion than an alternating gait does, so under the energy term the alternating pattern scores higher. This project adopts Liang's approach because it requires no hand-coded gait template and because the existing §3.1.4 reward already supplies the tracking block that the Liang reward composes with. Liang's claim is empirical, so the same gait family has to be verified on the Go2; that verification is §4.3.4.
 
-*Figure 4.6: Task-sampling distribution $c_j(\zeta)$ as a function of PPO iteration, per condition, under the Phase 1 reward.*
+The remainder of this section reproduces the Liang reward in its source notation (§4.2.1) and explains the procedure used to fix its scale parameters on the Go2 (§4.2.2). The matched three-condition comparison under the calibrated reward is reported in §4.3.
 
-Figure 4.6 is the visual signature of the previous paragraph. Uniform is a flat heatmap at $12.5\%$ per bin across all iterations. Task-specific shows bins 0 through 5 unlocking in quick succession early in training, after which the sampling mass is divided roughly uniformly across all unlocked bins; bin 6 unlocks late and bin 7 only at the very end of the run. Teacher-guided shows a moving column of mass: each bin takes a turn at the high-weight focus while it is improving, then fades to the $\varepsilon/N \approx 1.9\%$ floor when its LP drops. Note that the heatmap pattern teacher-guided produces (a stepwise diagonal focus from easy to hard) is what the proposal expected task-specific to produce; task-specific's actual heatmap is "everything unlocked, then uniform exposure on the unlocked set." Two operators with very different sampling shapes, and the one that produced the focused-attention shape is the one that reached bin 7.
+#### 4.2.1 The Liang energy-regularised reward
 
-Across the three views (per-bin reward in Table 4.1, EPTE-SP in Table 4.2, and the survival, achieved-velocity, and sampling patterns in Figures 4.4 through 4.6), the headline reading of Phase 1 is consistent. Uniform and task-specific track bins 0 through 5 and collapse on bins 6 and 7 because the boundary at $\sim 3$ m/s rewards focused training that neither operator provides on the top bins. Teacher-guided tracks bins 0 through 6 cleanly and partially reaches bin 7 because its LP-driven softmax delivers exactly that focused training. The next section turns to a question the per-bin tracking-reward and EPTE-SP numbers cannot answer on their own: even when the policy is tracking the commanded velocity, *how is the policy actually moving?*
+Liang et al. (2024) consider a single PPO policy on the Unitree Go1 quadruped tracking forward-velocity and yaw-rate commands. The total per-step reward is written as a multiplicative composition of three blocks,
+
+$$
+R = (R_{\mathrm{motion}} + R_{\mathrm{energy}}) \cdot f(R_{\mathrm{aux}}),
+\qquad (1)
+$$
+
+where $R_{\mathrm{motion}}$ scores command tracking, $R_{\mathrm{energy}}$ scores energetic efficiency, and $f(R_{\mathrm{aux}})$ is a positive multiplicative wrapping of an auxiliary term $R_{\mathrm{aux}}$ that aggregates the smoothness and safety penalties.
+
+The specific choice of $f$ in the paper is the exponential, so that the auxiliary block acts as a unit-bounded multiplier on the motion-plus-energy sum,
+
+$$
+R = \big( R_{\mathrm{motion}} + \alpha_{\mathrm{en}}\, R_{\mathrm{en}}(v_x, \omega_z) \big) \cdot \exp\!\big( - R_{\mathrm{aux}} \big),
+\qquad (2)
+$$
+
+where $\alpha_{\mathrm{en}} \ge 0$ is the scalar weight on the energy block.
+
+The motion block decomposes into a linear-velocity term and an angular-velocity term,
+
+$$
+R_{\mathrm{motion}} = R_{\mathrm{lin}} + \alpha_{\mathrm{ang}}\, R_{\mathrm{ang}},
+$$
+
+$$
+R_{\mathrm{lin}} = \exp\!\left( - \frac{ |v_x - \hat v_x|^2 + |v_y - \hat v_y|^2 }{\sigma_v} \right),
+$$
+
+$$
+R_{\mathrm{ang}} = \exp\!\left( - \frac{ |\omega_z - \hat\omega_z|^2 }{\sigma_\omega} \right),
+\qquad (3)
+$$
+
+where $\hat v_x, \hat v_y$ are the commanded linear-velocity components, $\hat\omega_z$ is the commanded yaw rate, $v_x, v_y, \omega_z$ are the measured values, and $\sigma_v, \sigma_\omega$ are scale parameters that control the width of the tracking kernel.
+
+The energy block is the new ingredient. Liang et al. (2024) define it as
+
+$$
+R_{\mathrm{en}} = \exp\!\left( - \frac{ \sum_i \, |\tau_i| \, |\dot q_i| }{ \sigma_{\mathrm{en},x}\, |v_x| + \sigma_{\mathrm{en},z}\, |\omega_z| } \right),
+\qquad (4)
+$$
+
+where $\tau_i$ is the applied joint torque on actuator $i$, $\dot q_i$ is the corresponding joint velocity, the sum runs over all actuated joints, and $\sigma_{\mathrm{en},x},\, \sigma_{\mathrm{en},z}$ are scale parameters that set the cost-of-transport scale on linear and angular motion respectively.
+
+Three design choices in (4) are non-obvious and they each have a behavioural consequence.
+
+- **Absolute values inside the sum.** The numerator uses $|\tau_i|\,|\dot q_i|$ rather than the signed product $\tau_i \dot q_i$. The signed product would be the net mechanical power flowing out of the actuator, which can be negative when the joint is braking. The absolute-value form charges the policy for braking energy as if it were positive energy expenditure, on the grounds that the physical motor does not regenerate that energy back into the battery. This is what the paper means by treating $\sum_i |\tau_i||\dot q_i|$ as a proxy for instantaneous power draw rather than as net mechanical work.
+- **Denominator as a command-magnitude scale.** The denominator $\sigma_{\mathrm{en},x}|v_x| + \sigma_{\mathrm{en},z}|\omega_z|$ is proportional to the measured speed of motion. The ratio inside the exponential is therefore (power) / (speed-scale), which has units of force times a per-axis scale, i.e. a cost of transport. The implication is that the same power draw is penalised less harshly when the robot is moving fast than when it is moving slow; the reward is shaped around energy *per unit of useful motion*, not energy per unit of time.
+- **Exponential wrapping.** The exponential makes $R_{\mathrm{en}} \in (0, 1]$, so it integrates additively into the motion block of (2) without dominating the tracking reward at any one timestep. There is no separate contact-schedule reward; the only thing pushing the policy toward an alternating gait is the cost-of-transport interpretation of the denominator.
+
+The reported defaults for the Go1 are $\sigma_{\mathrm{en},x} = 1000$, $\sigma_{\mathrm{en},z} = 500$, $\alpha_{\mathrm{en}} = 1.0$, and $\sigma_v = \sigma_\omega = 0.25$, on the forward-velocity range $v_x \in [0,\, 2.5]$ m/s. Liang et al. report an ablation in which setting $\alpha_{\mathrm{en}} = 0$ (energy block disabled) yields the bouncing four-foot synchronised gait described above, while $\alpha_{\mathrm{en}} = 1.0$ yields a walking pattern at low command speed, a two-beat trot at moderate command speed, and a fly-trotting pattern with a flight phase at high command speed, with no contact reference supplied at any point during training.
+
+This project's energy-regularised reward configuration uses (4) as written, with $\sigma_{\mathrm{en},x}$, $\sigma_{\mathrm{en},z}$, $\alpha_{\mathrm{en}}$, and $\sigma_v$ fixed by the calibration of §4.2.2 and a small clamping $\max(\cdot,\,\varepsilon)$ added to the denominator of (4) to bound the gradient at very low commanded speed.
+
+#### 4.2.2 Calibrating the energy scale
+
+The reward of (4) has one knob that matters: $\sigma_{\mathrm{en},x}$ (the linear-speed entry in the denominator), with $\sigma_{\mathrm{en},z} = 0.5\,\sigma_{\mathrm{en},x}$ fixed by the ratio Liang et al. (2024) used. The behaviour of $R_{\mathrm{en}} = \exp(-x)$ depends on where this knob places the argument $x$. If $\sigma_{\mathrm{en},x}$ is too small, $x$ is large and $R_{\mathrm{en}}$ collapses near zero; the energy term swamps the tracking term and the policy stops tracking. If $\sigma_{\mathrm{en},x}$ is too large, $x$ is small and $R_{\mathrm{en}}$ saturates near one; the energy term is a near-constant offset on the policy gradient and the policy ignores it. Only a middle $\sigma_{\mathrm{en},x}$ gives the policy a usable gradient from $R_{\mathrm{en}}$.
+
+Liang et al. (2024) report $\sigma_{\mathrm{en},x} = 1000$ for the Unitree Go1 on $v_x \in [0,\, 2.5]$ m/s. This project uses a different robot (Go2) and a wider command range ($v_x \in [0,\, 4]$ m/s). The joint-power numerator and the command-magnitude denominator of $R_{\mathrm{en}}$ both depend on the robot and the range, so Liang's value is not guaranteed to fall in the middle regime on the Go2. The right $\sigma_{\mathrm{en},x}$ has to be found by calibration.
+
+The calibration runs in two stages: a cheap diagnostic that bounds where $\sigma_{\mathrm{en},x}$ can sit at all, then a short training grid that picks the value within that bound which actually produces a natural gait.
+
+**Step 1: random-action diagnostic (no training).** Load the Go2 in Isaac Lab with the §3 simulation configuration; step it for a fixed number of timesteps under a uniformly-random joint-action policy. At each step record the power proxy $P = \sum_i |\tau_i|\,|\dot q_i|$, the absolute forward velocity $|v_x|$, and the absolute yaw rate $|\omega_z|$. For each candidate $\sigma_{\mathrm{en},x}$ in a logarithmically-spaced grid, compute the mean of $R_{\mathrm{en}}$ across the rollout. Keep the $\sigma_{\mathrm{en},x}$ values where mean$(R_{\mathrm{en}})$ lies between $0.3$ and $0.75$.
+
+Two facts justify this band. First, the slope $dR_{\mathrm{en}}/dx = -R_{\mathrm{en}}$ is only steep when $R_{\mathrm{en}}$ is in the middle; the band $[0.3,\, 0.75]$ corresponds to $x \in [0.29,\, 1.20]$, the region where changes in $P$ change $R_{\mathrm{en}}$ enough for the policy to act on. Outside this band the exponential is flat and the energy term is effectively silent. Second, random actions are the worst case for $R_{\mathrm{en}}$: high $P$ (uncoordinated motion produces large torques and joint velocities), low $|v_x|$ (no net forward motion), so $x$ is at its largest and $R_{\mathrm{en}}$ at its smallest. A $\sigma_{\mathrm{en},x}$ that places the random-action mean inside $[0.3,\, 0.75]$ will only push $R_{\mathrm{en}}$ upward as the policy learns to track, so the energy term quiets itself as the gait improves.
+
+Step 1 tunes only $\sigma_{\mathrm{en},x}$, and only at the random-action initial state. It says nothing about the other two free knobs of the calibrated reward — the energy weight $\alpha_{\mathrm{en}}$ and the tracking-kernel width $\sigma_v$ — and it cannot verify that the live gradient actually steers the policy to a walking or trotting gait once training starts. Both gaps are closed by Step 2.
+
+**Step 2: calibration grid (short training).** Take three $\sigma_{\mathrm{en},x}$ values from the Step 1 bracket (low, middle, high) and cross them with three choices of $(\sigma_v,\,\alpha_{\mathrm{en}})$, giving a $3 \times 3$ grid of $9$ training runs. Each cell trains a uniform-sampling policy under the energy-regularised reward at a reduced budget chosen for grid throughput. Each trained policy is then evaluated under the §3.3 protocol on the eight velocity bins, including the gait label assigned by §4.3.4. The cell whose policy produces a *walk* or *trot* label (rather than *bound*, *pronk*, or *irregular*) at the upper bins is selected; its $(\sigma_{\mathrm{en},x},\,\sigma_{\mathrm{en},z},\,\sigma_v,\,\alpha_{\mathrm{en}})$ tuple is frozen and reused as the energy-regularised reward configuration for the matched three-condition sweep of §4.3.
+
+**Step 1 result.** Table 4.4 reports the Step 1 random-action diagnostic for seven candidate $\sigma_{\mathrm{en},x}$ values on a logarithmic grid. The mean instantaneous power proxy was $100.2$ W, the mean $|v_x|$ was $0.10$ m/s, and the mean $|\omega_z|$ was $0.35$ rad/s.
+
+| $\sigma_{\mathrm{en},x}$ | mean $R_{\mathrm{en}}$ | std $R_{\mathrm{en}}$ | regime |
+|---:|---:|---:|---|
+| $50$ | $0.013$ | $0.046$ | too strong (saturated near $0$) |
+| $100$ | $0.063$ | $0.097$ | strong |
+| $250$ | $0.240$ | $0.191$ | strong |
+| $500$ | $0.436$ | $0.223$ | useful gradient |
+| $1000$ | $0.627$ | $0.207$ | useful gradient |
+| $2000$ | $0.775$ | $0.163$ | weak gradient |
+| $5000$ | $0.895$ | $0.099$ | weak gradient |
+
+*Table 4.4: Step 1 random-action diagnostic on the Go2 under the §3 simulation configuration, $1000$ random-action steps per candidate $\sigma_{\mathrm{en},x}$. Values inside the $[0.3,\,0.75]$ band are those for which $R_{\mathrm{en}}$ is in the steep region of its argument; values outside the band give a flat gradient.*
+
+![Step 1 random-action diagnostic of mean $R_{en}$ versus $\sigma_{en,x}$.](../src/results_phase2_rerun/figures/sigma_phase0.png)
+
+*Figure 4.7: Step 1 random-action diagnostic. Mean $R_{\mathrm{en}}$ across the rollout as a function of $\sigma_{\mathrm{en},x}$ on the logarithmic grid of Table 4.4. The $[0.3,\,0.75]$ usable-gradient band is shaded.*
+
+Only $\sigma_{\mathrm{en},x} \in \{500, 1000\}$ fall inside the target band; $250$ is just below at $0.240$ and $2000$ is just above at $0.775$. The Step 2 grid is anchored on the in-band pair and reaches into the just-below band to verify that the calibration does not lose tracking quality at the low end. The three $\sigma_{\mathrm{en},x}$ values selected for the grid are $\{500,\, 750,\, 1000\}$, and they are crossed with $(\sigma_v,\,\alpha_{\mathrm{en}}) \in \{(0.5, 1.0),\, (1.0, 1.0),\, (1.0, 0.5)\}$.
+
+**Step 2 result.** Table 4.5 reports the $3 \times 3$ calibration grid evaluated under the deterministic protocol of §3.3. Each grid cell was trained for $1500$ PPO iterations under uniform sampling. The three columns track different aspects of the resulting policy: the summed per-bin tracking error $\sum_j \mathrm{err}_j$ across all eight bins, the duty-factor differential between the lowest and the mid bin ($\beta_{b_0} - \beta_{b_4}$, a coarse proxy for whether the gait pattern changes with command magnitude), and the wall-clock cost.
+
+| Run | $\sigma_{\mathrm{en},x}$ | $\sigma_v$ | $\alpha_{\mathrm{en}}$ | $\sum_j$ err | $\beta_{b_0} - \beta_{b_4}$ | wall-clock (min) |
+|---:|---:|---:|---:|---:|---:|---:|
+| 1 | $500$ | $0.5$ | $1.0$ | $2.922$ | $0.155$ | $32.4$ |
+| 2 | $750$ | $0.5$ | $1.0$ | $2.333$ | $0.088$ | $33.8$ |
+| 3 | $1000$ | $0.5$ | $1.0$ | $2.487$ | $0.099$ | $32.9$ |
+| 4 | $500$ | $1.0$ | $1.0$ | $1.787$ | $0.105$ | $36.4$ |
+| 5 | $750$ | $1.0$ | $1.0$ | $1.750$ | $0.183$ | $34.5$ |
+| 6 | $1000$ | $1.0$ | $1.0$ | $1.627$ | $0.143$ | $33.7$ |
+| **7** | **$500$** | **$1.0$** | **$0.5$** | **$1.537$** | **$0.143$** | **$37.5$** |
+| 8 | $750$ | $1.0$ | $0.5$ | $1.798$ | $0.137$ | $38.6$ |
+| 9 | $1000$ | $1.0$ | $0.5$ | $1.585$ | $0.104$ | $32.0$ |
+
+*Table 4.5: Step 2 calibration grid. Each row is a separate uniform-sampling training run at $1500$ PPO iterations under the energy-regularised reward, with the listed $(\sigma_{\mathrm{en},x},\,\sigma_v,\,\alpha_{\mathrm{en}})$ tuple. Tracking-quality column is the sum of per-bin tracking error across all eight bins. The fifth column is the duty-factor differential between the bottom and the middle of the velocity range. Run 7 is highlighted as the selected configuration. $\sigma_{\mathrm{en},z}$ is fixed at $0.5\,\sigma_{\mathrm{en},x}$ throughout.*
+
+![Step 2 calibration grid: per-bin tracking error and duty factor across the nine runs.](../src/results_phase2_rerun/figures/sigma_phase_v4.png)
+
+*Figure 4.8: Step 2 calibration grid. Per-bin tracking error (top) and per-bin duty factor (bottom) for each of the nine runs of Table 4.5. Run 7 (selected configuration) is highlighted.*
+
+Three observations on Table 4.5. (i) Across all nine cells, no run masters bin 7 ($3.5$–$4.0$ m/s) within the $1500$-iteration grid budget: this is consistent with §4.1.1, since the grid uses uniform sampling, and uniform alone does not reach the sprint bin even under the energy-regularised reward (cf. §4.3.1). (ii) The $\sigma_v = 0.5$ rows (Runs 1–3) have summed tracking error in the range $2.3$–$2.9$, well above the $\sigma_v = 1.0$ rows ($1.5$–$1.8$); the wider tracking kernel matters more than the choice of $\sigma_{\mathrm{en},x}$ in this grid, because the narrower kernel collapses to near zero at velocity errors that the wider kernel still gives a usable gradient on. (iii) Within the $\sigma_v = 1.0$ rows, the best summed tracking error is Run 7 ($1.537$), and the best gait differential is Run 5 ($0.183$); Run 7 was chosen over Run 5 because the tracking advantage is larger than the gait-differential gap, and because reducing $\alpha_{\mathrm{en}}$ from $1.0$ to $0.5$ leaves more headroom for the curriculum to be the binding constraint on sprint progress (§4.3).
+
+The chosen tuple is therefore
+
+$$
+\sigma_{\mathrm{en},x} = 500, \quad \sigma_{\mathrm{en},z} = 250, \quad \sigma_v = 1.0, \quad \alpha_{\mathrm{en}} = 0.5,
+$$
+
+and it is reused unchanged for the matched three-condition sweep of §4.3.
+
+### 4.3 Three curricula under the energy-regularised reward
+
+A second three-condition (uniform, task-specific, teacher-guided) sweep with three independent seeds per condition was run to $3000$ PPO iterations under the energy-regularised reward of §4.2.1, with the scale parameters fixed at the values chosen by the calibration of §4.2.2. The remaining experimental configuration (curriculum operators, evaluation protocol, command range, episode length, PPO hyperparameters) is identical to §4.1, so the two halves of this chapter are directly comparable on a per-cell basis.
+
+#### 4.3.1 Per-bin tracking-reward convergence
+
+Table 4.6 reports the smoothed per-bin tracking reward $R_j$ at the end of training under the energy-regularised reward, averaged across the three seeds.
+
+| Bin | $v_x^{\mathrm{cmd}}$ | Uniform | Task-specific | Teacher-guided |
+|---:|---:|---:|---:|---:|
+| 0 | 0.25 m/s | $0.812 \pm 0.007$ | $0.850 \pm 0.007$ | $0.915 \pm 0.003$ |
+| 1 | 0.75 m/s | $0.820 \pm 0.006$ | $0.848 \pm 0.008$ | $0.915 \pm 0.002$ |
+| 2 | 1.25 m/s | $0.814 \pm 0.007$ | $0.842 \pm 0.006$ | $0.916 \pm 0.002$ |
+| 3 | 1.75 m/s | $0.820 \pm 0.007$ | $0.848 \pm 0.007$ | $0.914 \pm 0.003$ |
+| 4 | 2.25 m/s | $0.815 \pm 0.007$ | $0.841 \pm 0.008$ | $0.915 \pm 0.002$ |
+| 5 | 2.75 m/s | $0.812 \pm 0.008$ | $0.843 \pm 0.005$ | $0.915 \pm 0.002$ |
+| 6 | 3.25 m/s | $0.814 \pm 0.007$ | $0.846 \pm 0.005$ | $0.915 \pm 0.002$ |
+| 7 | 3.75 m/s | $0.809 \pm 0.007$ | $0.842 \pm 0.008$ | $0.912 \pm 0.003$ |
+
+*Table 4.6: Per-bin tracking reward $R_j$ at end of training, mean $\pm$ std across three seeds, energy-regularised reward of §4.2.1 with the Run-7 tuple, 3000 PPO iterations per cell.*
+
+The first thing to notice is that every cell of Table 4.6 is above $\gamma = 0.7$. The energy-regularised reward closes the bin-6 and bin-7 gap that the sprint-retune reward of §4.1 left open: there is no condition under which the policy refuses to even produce a non-zero training-time tracking signal at the sprint commands. All three conditions plateau to a tracking value that is approximately flat across the eight bins, an order-of-magnitude difference from the sprint-retune column of Table 4.1.
+
+The second thing to notice is the ordering across conditions. Teacher-guided plateaus uniformly higher ($0.91$–$0.92$) than task-specific ($0.84$–$0.85$), which in turn plateaus uniformly higher than uniform ($0.81$–$0.82$). The gap is not a per-bin gap; it is a level gap, and it is consistent with the curriculum operators allocating different amounts of compute to bins of different difficulty during training: teacher-guided revisits the harder bins more often, so the trained policy has a slightly higher tracking signal everywhere on the eight-bin grid.
+
+The per-bin tracking-reward curves are reproduced in Figure 4.9. Teacher-guided reaches a plateau around iteration $1500$ at every bin; task-specific reaches the same plateau by iteration $2500$; uniform reaches a noticeably lower plateau by iteration $\sim 1500$ at low bins and continues drifting up slowly at high bins. The training-time tracking signal alone would suggest all three conditions have converged usefully across the full velocity range; the deterministic-evaluation metrics in §4.3.2 say something stricter.
+
+![Per-bin tracking-reward learning curves, energy-regularised reward.](../src/results_phase2_rerun/figures/learning_curves_rlin.png)
+
+*Figure 4.9: Per-bin tracking-reward curves, energy-regularised reward, three seeds per condition. Rows are velocity bins, columns are curriculum conditions. The mastery threshold $\gamma = 0.7$ is marked as a horizontal reference.*
+
+The iterations-to-mastery metric is summarised in Table 4.7.
+
+| Bin | $v_x^{\mathrm{cmd}}$ | Uniform | Task-specific | Teacher-guided |
+|---:|---:|---:|---:|---:|
+| 0 | 0.25 | 35 | 35 | 33 |
+| 1 | 0.75 | 295 | 59 | 43 |
+| 2 | 1.25 | 415 | 85 | 220 |
+| 3 | 1.75 | 407 | 154 | 221 |
+| 4 | 2.25 | 419 | 279 | 265 |
+| 5 | 2.75 | 429 | 281 | 275 |
+| 6 | 3.25 | 421 | 414 | 333 |
+| 7 | 3.75 | 425 | 389 | 353 |
+
+*Table 4.7: Iterations-to-mastery per (condition, bin) cell, energy-regularised reward, mean across the three seeds. Every cell of this table reaches mastery within the 3000-iteration budget; this is the qualitative change from Table 4.2.*
+
+Under the energy-regularised reward every (condition, bin) cell crosses the mastery threshold $\gamma = 0.7$ within the 3000-iteration budget. This is the qualitative difference from Phase 1 in §4.1.1: uniform was unable to master bins 6 and 7 there, and is able to here. The ranking by iterations-to-mastery is teacher-guided $\lt$ task-specific $\lt$ uniform on the upper four bins ($b_4, b_5, b_6, b_7$).
+
+![Iterations-to-mastery per (condition, bin), energy-regularised reward.](../src/results_phase2_rerun/figures/iterations_to_mastery.png)
+
+*Figure 4.10: Iterations-to-mastery per (condition, bin), energy-regularised reward. Each bar is the mean across three seeds.*
+
+![Per-bin sampling weight across training, energy-regularised reward.](../src/results_phase2_rerun/figures/sampling_heatmap.png)
+
+*Figure 4.11: Per-bin sampling weight across training, energy-regularised reward. Rows are velocity bins, columns are training iterations. Uniform is flat by construction; task-specific expands its support monotonically; teacher-guided reallocates sampling toward bins with the largest learning progress.*
+
+#### 4.3.2 Per-bin EPTE-SP
+
+Table 4.8 reports the EPTE-SP and fall fraction from the deterministic-evaluation protocol of §3.3, exactly the same metric as Table 4.3 of §4.1.2 but on the energy-regularised reward.
+
+| Bin | $v_x^{\mathrm{cmd}}$ | Uniform EPTE-SP / fall% | Task-specific EPTE-SP / fall% | Teacher EPTE-SP / fall% |
+|---:|---:|---:|---:|---:|
+| 0 | 0.25 | $0.504$ / $1\%$ | $0.402$ / $0\%$ | $0.399$ / $1\%$ |
+| 1 | 0.75 | $0.130$ / $0\%$ | $0.112$ / $0\%$ | $0.121$ / $0\%$ |
+| 2 | 1.25 | $0.062$ / $0\%$ | $0.061$ / $0\%$ | $0.062$ / $0\%$ |
+| 3 | 1.75 | $0.056$ / $0\%$ | $0.058$ / $0\%$ | $0.057$ / $0\%$ |
+| 4 | 2.25 | $0.054$ / $0\%$ | $0.053$ / $0\%$ | $0.056$ / $1\%$ |
+| 5 | 2.75 | $0.057$ / $0\%$ | $0.057$ / $0\%$ | $0.061$ / $0\%$ |
+| 6 | 3.25 | $0.093$ / $0\%$ | $0.083$ / $0\%$ | $0.075$ / $1\%$ |
+| 7 | 3.75 | $0.860$ / $0\%$ | $0.630$ / $0\%$ | $0.111$ / $0\%$ |
+
+*Table 4.8: Per-bin EPTE-SP and fall fraction, energy-regularised reward, three seeds and 300 rollouts per cell.*
+
+Three changes from the Phase 1 row of the same metric (Table 4.3) are visible. (i) The fall column has collapsed to almost zero across the board. Under the energy-regularised reward, none of the three conditions falls at any of the eight bins in any meaningful fraction of rollouts; the previously catastrophic bin-6 and bin-7 collapse of uniform and task-specific is gone. (ii) Bins 0 through 6 are within $\sim 10\%$ tracking error for all three conditions (interpreting the $0.4$–$0.5$ EPTE-SP at bin 0 as the normalisation artefact discussed in §4.1.2). (iii) At bin 7 the three conditions separate sharply: teacher-guided $0.111$, task-specific $0.630$, uniform $0.860$.
+
+The bin-7 separation is the central observation of this section. The mean forward velocity at bin 7 under deterministic evaluation, taken from Figure 4.12, is
+
+- Uniform: $\bar v_x = 0.53$ m/s (command $3.75$ m/s),
+- Task-specific: $\bar v_x = 1.39$ m/s,
+- Teacher-guided: $\bar v_x = 3.35$ m/s,
+
+so uniform is essentially refusing the sprint command (the policy stands or shuffles forward at well below walking speed), task-specific produces a half-speed running gait, and only teacher-guided produces an actual sprint at the commanded velocity. None of the three falls; the bin-7 EPTE-SP rank is therefore a rank in *what velocity the policy will accept the command at*, not in survival.
+
+![Measured vs commanded forward velocity per bin, energy-regularised reward.](../src/results_phase2_rerun/figures/v_actual_vs_cmd.png)
+
+*Figure 4.12: Mean measured forward velocity vs commanded velocity, energy-regularised reward. Diagonal is the perfect-tracking reference. Uniform sits near $\bar v_x = 0.5$ m/s at bin 7 against the $3.75$ m/s command; only teacher-guided follows the diagonal through the sprint bin.*
+
+![EPTE-SP per (condition, bin), energy-regularised reward.](../src/results_phase2_rerun/figures/epte_bars.png)
+
+*Figure 4.13: EPTE-SP per (condition, bin), energy-regularised reward. Bin-7 bars separate the three conditions: teacher-guided $0.111$, task-specific $0.630$, uniform $0.860$.*
+
+The deterministic-evaluation rank at bin 7 inverts the training-time tracking-reward rank of Table 4.6, where uniform and task-specific also showed values around $0.81$–$0.84$. The training-time signal is computed on noisy rollouts under the policy's stochastic action distribution, which is wide enough that the integrated $R_{\mathrm{lin}}$ over the rollout can be substantial even when the deterministic mean of the policy does not move. The deterministic-evaluation EPTE-SP is the more truthful description of what the trained policy does when noise is removed, and Table 4.8 indicates that uniform under the energy-regularised reward did not actually learn to sprint, even though its training curve appears to converge above the mastery threshold.
+
+#### 4.3.3 Qualitative behaviour at evaluation
+
+The two reward hacks of §4.1.3 are no longer visible. The three-legged stance at bin 0 has been replaced by a four-foot walking pattern under all three conditions, and the four-foot synchronised pattern at bin 6–7 has been replaced (under uniform and task-specific) by a stand-still, and (under teacher-guided) by an alternating gait with a flight phase.
+
+The per-bin per-condition contact plot is reproduced in Figure 4.14. Three patterns stand out.
+
+![Per-foot stance/swing strips at deterministic evaluation, energy-regularised reward.](../src/results_phase2_rerun/figures/gait_diagram.png)
+
+*Figure 4.14: Gait diagram at deterministic evaluation, energy-regularised reward. Columns are conditions (uniform / task-specific / teacher-guided), rows are velocity bins. Coloured blocks mark stance (foot in contact); white gaps mark swing. Per cell the plotted rollout is the best-surviving rollout across the three seeds, with ties broken by closest mean forward velocity to the command. The teacher-guided column shows the walk-like contact pattern at low bins evolving into a trot with intermittent flight phase at the upper bins.*
+
+- **Uniform.** Every visible bin is classified as a long-stance walking pattern (the gait classifier labels it *LSDC walk* using the Hildebrand-style descriptor). The pattern is consistent across bins because, at the upper bins, the policy is barely moving (cf. the $\bar v_x = 0.53$ m/s at bin 7 from §4.3.2); the per-foot contact signal still cycles at low cadence regardless of the command. Uniform under the energy-regularised reward solves the *survival* part of the sprint command (it doesn't fall) but not the *velocity* part (it doesn't move).
+- **Task-specific.** Bins 0–5 look similar to the uniform row, with the difference that the classifier labels several of them as *trot (walking) ±DAP* (a trotting pattern with double airborne phase). At bin 6 the policy holds an alternating gait with a brief flight phase. At bin 7 the policy regresses to a *Canter (R-lead)* pattern that, paired with the half-speed forward motion of $1.39$ m/s, indicates the policy has reached the bin but is unable to sustain a full sprint within the 3000-iteration budget.
+- **Teacher-guided.** Bins 0–1 are a walk. Bins 2–6 are a *trot (walking) ±DAP*. Bin 7 is a *trot (walking) ±DAP* with a longer flight phase, and the mean forward velocity is $3.35$ m/s, within roughly $10\%$ of the commanded $3.75$ m/s. This is the Liang et al. (2024) walk → trot → fly-trot progression on the Go2 across the $0$–$4$ m/s envelope.
+
+The contact-pattern progression under teacher-guided is the qualitative confirmation that the Liang reward of §4.2 induces the autonomous gait family it was selected for. The companion progression under uniform and task-specific is the qualitative confirmation that without a curriculum that allocates compute to the harder bins, the energy reward alone is not sufficient: the policy can find a comfortable local optimum that is *not* the running gait at high commands.
+
+#### 4.3.4 Gait classification
+
+Liang et al. (2024) claim that the energy-regularised reward of §4.2.1 induces walking, trotting, and fly-trotting on the Go1 without any contact-phase reference being supplied during training. Whether the same reward induces the same family of contact patterns on the Go2 across $[0,\,4]$ m/s is an empirical question, and answering it requires turning the per-foot contact time series of each evaluation rollout into a labelled gait class.
+
+For each rollout the per-foot contact signal $c_i(t) \in \{0, 1\}$ is recorded at every simulation step for $i \in \{\mathrm{FL},\, \mathrm{FR},\, \mathrm{RL},\, \mathrm{RR}\}$ (front-left, front-right, rear-left, rear-right). Three derived quantities are extracted per rollout.
+
+- **Stride period $T$.** The dominant period of $c_{\mathrm{FL}}(t)$ over the rollout, computed from the autocorrelation peak in the lag range $[0.1,\, 1.0]$ s.
+- **Per-foot duty factor $\beta_i$.** The fraction of one stride for which $c_i(t) = 1$, averaged over all complete strides in the rollout. Reported as the mean across the four feet, $\beta = \tfrac{1}{4} \sum_i \beta_i$.
+- **Pairwise phase offsets $\phi_{ij}$.** For each foot pair $(i, j)$, the touchdown time of foot $j$ minus the touchdown time of foot $i$, modulo the stride period and normalised by it, so that $\phi_{ij} \in [0,\, 1)$.
+
+The four-foot contact pattern is assigned a gait label by template matching on the phase offsets, with tolerance $\delta = 0.1$ on each offset:
+
+| Label | $\phi_{\mathrm{FL}\text{-}\mathrm{FR}}$ | $\phi_{\mathrm{FL}\text{-}\mathrm{RL}}$ | $\phi_{\mathrm{FL}\text{-}\mathrm{RR}}$ | Typical duty factor $\beta$ |
+|---|:---:|:---:|:---:|:---:|
+| Pronk | $0$ | $0$ | $0$ | any |
+| Bound | $0$ | $0.5$ | $0.5$ | $\le 0.5$ |
+| Pace | $0.5$ | $0$ | $0.5$ | $\sim 0.5$ |
+| Trot | $0.5$ | $0.5$ | $0$ | $\sim 0.5$ (fly-trot if $\beta < 0.5$) |
+| Walk | $0.5$ | $0.25$ or $0.75$ | $0.75$ or $0.25$ | $> 0.6$ |
+
+A rollout that fails template matching (no template within tolerance $\delta$ on all three offsets) is labelled *irregular*. Per (condition, bin) cell, the dominant label is the modal label across the $300$ rollouts and the mean duty factor is the average of $\beta$ across rollouts. The label classes (pronk, bound, pace, trot, walk) follow the standard quadruped-biomechanics taxonomy; the inclusion of *fly-trot* as a sub-class of trot follows Liang et al. (2024).
+
+The classifier output for the Phase 2 (energy-regularised) sweep is reproduced in Table 4.9. The label for each (condition, bin) cell is the modal label across the 300 deterministic rollouts. Cells in which the deterministic rollout was too short for a stride period to be extracted (i.e. the policy did not take repeated steps within the rollout) are marked *n/a*.
+
+| Bin | $v_x^{\mathrm{cmd}}$ | Uniform | Task-specific | Teacher-guided |
+|---:|---:|---|---|---|
+| 0 | 0.25 m/s | LSDC walk | Canter (R-lead) | Canter (R-lead) |
+| 1 | 0.75 m/s | LSDC walk | LSDC walk | LSDC walk |
+| 2 | 1.25 m/s | LSDC walk | Trot (walking) ±DAP | LSDC walk |
+| 3 | 1.75 m/s | LSDC walk | Trot (walking) ±DAP | Trot (walking) ±DAP |
+| 4 | 2.25 m/s | LSDC walk | Trot (walking) ±DAP | Trot (walking) ±DAP |
+| 5 | 2.75 m/s | LSDC walk | Trot (walking) ±DAP | Trot (walking) ±DAP |
+| 6 | 3.25 m/s | LSDC walk | Trot (walking) ±DAP | Trot (walking) ±DAP |
+| 7 | 3.75 m/s | n/a (short episode) | Canter (R-lead) | Trot (walking) ±DAP |
+
+*Table 4.9: Modal gait label per (condition, bin) cell at deterministic evaluation, energy-regularised reward. "LSDC walk" = long-stance double-contact walk (Hildebrand low-speed pattern). "Trot (walking) ±DAP" = diagonal-pair trotting with intermittent double-airborne phase. "Canter (R-lead)" = asymmetric three-beat pattern with rear-foot lead.*
+
+Teacher-guided is the only condition whose label progresses with the command. Bins 0–2 are walking patterns; bins 3–7 are trotting patterns with intermittent flight. This is the Liang et al. (2024) walk → trot → fly-trot progression that the energy term was selected for, but it appears here only under teacher-guided sampling. Task-specific shows a similar progression on the low half (bins 0 through 6) but regresses to a *Canter* asymmetric pattern at bin 7 because the policy never sustained the sprint long enough at that bin for the operator's mastery threshold to lock in the alternating pattern. Uniform produces a single low-speed walking pattern at every bin, including the bins where the policy is not moving forward (bins 6 and 7); the gait label is meaningful only on bins 0–5 of the uniform row, since the bin-6 and bin-7 entries are produced from a near-stationary policy.
+
+The gait-classification table is the empirical answer to the question raised at the end of §4.2: the Liang reward does induce the same family of contact patterns on the Go2 as it did on the Go1 in the original paper, *under the curriculum that allocates compute to the harder bins*. The reward and the curriculum are not separable.
+
+---
+
+## 5. Conclusion
+
+This report compared three velocity-command sampling rules — uniform, task-specific (Box Adaptive; Margolis et al., 2022), and teacher-guided (LP-ACRL; Li, Li, & Hutter, 2026) — on a single PPO policy on the Unitree Go2 across the forward-velocity range $[0,\,4]$ m/s. The comparison was run twice under different reward configurations so that the curriculum effect could be separated from the reward effect: once under a *sprint-retune* reward in which the upstream IsaacLab smoothness weights were reduced by an order of magnitude (§3.1.4), and once under the *energy-regularised* reward of Liang et al. (2024) with scale parameters calibrated for the Go2 (§4.2).
+
+The main empirical findings are:
+
+- **Curricula matter only at the top of the velocity range.** On bins 0 through 5 (commands up to $3.0$ m/s) all three conditions reach the same per-bin tracking-reward plateau and the same per-bin EPTE-SP within single-digit-percent tracking error. The separation between conditions is concentrated in bins 6 and 7 ($3.0$ to $4.0$ m/s), the regime in which Margolis et al. (2022) originally motivated curriculum learning.
+- **Under the sprint-retune reward, only teacher-guided reaches the sprint bins.** At bins 6 and 7, uniform and task-specific collapse to a near-stationary policy that falls in over $94\%$ of deterministic rollouts (EPTE-SP at the saturated maximum). Teacher-guided produces a running gait that reaches $2.43$–$2.49$ m/s against $3.25$–$3.75$ m/s commands and survives $66\%$–$74\%$ of rollouts. Iterations-to-mastery confirms the same separation: teacher-guided is the only condition that crosses the $\gamma = 0.7$ threshold at bins 6 and 7 within the 3000-iteration budget.
+- **The energy-regularised reward removes the survival failure but does not on its own remove the velocity failure.** Under the calibrated Liang reward, no condition falls at any bin, but uniform regresses to $\bar v_x = 0.53$ m/s at the $3.75$ m/s sprint bin and task-specific to $\bar v_x = 1.39$ m/s. Only teacher-guided reaches $\bar v_x = 3.35$ m/s at the same bin. The energy reward and the curriculum are both necessary to reach the sprint at the commanded speed; either alone is insufficient on the Go2 at $3000$ iterations.
+- **The Liang gait family transfers to the Go2 — under teacher-guided sampling only.** The walk → trot → fly-trot progression that Liang et al. (2024) reported on the Go1 across $[0,\,2.5]$ m/s reproduces on the Go2 across $[0,\,4]$ m/s in the teacher-guided condition: bins 0–2 are walking, bins 3–7 are trotting with intermittent flight. Under uniform sampling the gait classifier records a single low-speed walking pattern across every bin, including the bins where the policy is not actually moving.
+- **The Margolis vs Li theoretical distinction has an empirical signature.** Box Adaptive's monotone support expansion was faster than LP-ACRL on bins 0–5 (Tables 4.2 and 4.7) but stalled at bins 6 and 7 under the sprint-retune reward, because once those bins were added to the support the operator distributed sampling uniformly across the active set rather than concentrating compute on the unmastered sprint bin. LP-ACRL's softmax-over-progress reallocation kept the sampling weight at the sprint bin proportional to its observed learning progress, which is the mechanism that delivered the bin-6 and bin-7 mastery in §4.1.1.
+
+There are several caveats. (i) Each (condition, seed) cell is a single run, so the seed-spread reported in the tables is computed across three independent seeds rather than across replicated training runs. (ii) The 3000-iteration budget is short relative to comparable wide-range velocity-tracking studies; the bin-6 and bin-7 collapse under uniform and task-specific in §4.1 is a failure mode at this budget, not necessarily an asymptotic failure mode. (iii) All experiments are flat-ground, single-platform, simulation-only; the report does not claim that the chosen tuple of $(\sigma_{\mathrm{en},x},\,\sigma_{\mathrm{en},z},\,\sigma_v,\,\alpha_{\mathrm{en}})$ transfers to terrain, to other quadrupeds, or to hardware.
+
+Within those bounds, the matched comparison supports the conclusion that the choice of curriculum operator is the binding constraint on whether a single PPO policy on the Unitree Go2 can reach the sprint end of a $[0,\,4]$ m/s command range, and that a learning-progress-driven sampling rule is required to do so under a short training budget. The two-step $\sigma$ calibration of §4.2.2 reduces the energy-reward configuration to a single $3 \times 3$ grid that can be reproduced from the diagnostic of Table 4.4 alone, which removes the one hand-tuned hyperparameter that the Liang reward would otherwise have inherited from the Go1.
 
 ---
 
 ## References
 
 Li, Z., Li, C., & Hutter, M. (2026). Scaling rough terrain locomotion with automatic curriculum reinforcement learning. *arXiv:2601.17428*. <https://arxiv.org/abs/2601.17428>
+
+Liang, Z., Sun, Y., Zhu, K., Zhang, Y., Xiong, S., Wang, Z., Li, R., Sreenath, K., & Tomizuka, M. (2024). Adaptive energy regularization for autonomous gait transition and energy-efficient quadruped locomotion. *arXiv:2403.20001v2*. <https://arxiv.org/abs/2403.20001>
 
 Margolis, G. B., Yang, G., Paigwar, K., Chen, T., & Agrawal, P. (2022). Rapid locomotion via reinforcement learning. *Robotics: Science and Systems*. <https://arxiv.org/abs/2205.02824>
 

@@ -1,0 +1,13 @@
+mean power : 100.152 W
+mean |v_x| : 0.0955 m/s
+mean |w_z| : 0.3469 rad/s
+
+sigma_en_x  mean(R_en)  std(R_en)      min      max  gradient regime
+--------------------------------------------------------------------------------
+        50       0.013      0.046    0.000    1.000  too strong (saturated near 0)
+       100       0.063      0.097    0.000    1.000  strong
+       250       0.240      0.191    0.000    1.000  strong
+       500       0.436      0.223    0.000    1.000  useful gradient
+      1000       0.627      0.207    0.000    1.000  useful gradient
+      2000       0.775      0.163    0.000    1.000  weak gradient
+      5000       0.895      0.099    0.000    1.000  weak gradient

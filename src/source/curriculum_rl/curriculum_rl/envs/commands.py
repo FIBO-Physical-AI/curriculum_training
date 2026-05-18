@@ -36,6 +36,7 @@ class BinnedVelocityCommand(UniformVelocityCommand):
         self.env_bin_idx = torch.zeros(self.num_envs, dtype=torch.long, device=self.device)
         self.curriculum: CurriculumBase = self._build_curriculum(cfg)
         self._weights_gpu = torch.from_numpy(np.ascontiguousarray(self.curriculum.weights)).float().to(self.device)
+        self._bin_snapshot = self.env_bin_idx.clone()
 
     def _build_curriculum(self, cfg: "BinnedVelocityCommandCfg") -> CurriculumBase:
         if cfg.curriculum_kind == "uniform":
@@ -65,6 +66,18 @@ class BinnedVelocityCommand(UniformVelocityCommand):
 
     def sync_weights_from_curriculum(self) -> None:
         self._weights_gpu = torch.from_numpy(np.ascontiguousarray(self.curriculum.weights)).float().to(self.device)
+
+    # ------------------------------------------------------------------
+    # Snapshot env_bin_idx BEFORE Isaac Lab's timer-triggered resample so
+    # that velocity_curriculum_step can attribute episode rewards to the
+    # bin that was active *during* the episode, not the one drawn for the
+    # next episode.  Isaac Lab calls command_manager.compute() (which fires
+    # timer-based resamples) before the termination check and curriculum
+    # step in the same env.step(), so without this snapshot the curriculum
+    # reads the post-resample bin index.
+    def compute(self, *args, **kwargs):
+        self._bin_snapshot[:] = self.env_bin_idx
+        return super().compute(*args, **kwargs)
 
     def _resample_command(self, env_ids):
         n = len(env_ids)

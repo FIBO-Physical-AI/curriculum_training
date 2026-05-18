@@ -147,7 +147,10 @@ def velocity_curriculum_step(
             / ep_len
             / max(float(reward_cfg.weight), 1e-6)
         )
-        bins = cmd.env_bin_idx[env_ids_t]
+        # Use the pre-resample snapshot so rewards are attributed to the bin
+        # that was active during the episode, not the next episode's bin.
+        _bin_src = getattr(cmd, "_bin_snapshot", cmd.env_bin_idx)
+        bins = _bin_src[env_ids_t]
         standing = getattr(cmd, "is_standing_env", None)
         keep = None
         if standing is not None:
@@ -167,12 +170,12 @@ def velocity_curriculum_step(
             ep_len_kept = ep_len_unclamped[keep]
             fall_kept = fall_per_env[keep]
             vx_kept = vx_per_env[keep]
-            bins_kept = cmd.env_bin_idx[env_ids_t][keep]
+            bins_kept = _bin_src[env_ids_t][keep]
         else:
             ep_len_kept = ep_len_unclamped
             fall_kept = fall_per_env
             vx_kept = vx_per_env
-            bins_kept = cmd.env_bin_idx[env_ids_t]
+            bins_kept = _bin_src[env_ids_t]
         if ep_len_kept.numel() > 0:
             _per_bin_ep_len_sum.scatter_add_(0, bins_kept, ep_len_kept)
             _per_bin_vx_at_term_sum.scatter_add_(0, bins_kept, vx_kept)
@@ -184,7 +187,7 @@ def velocity_curriculum_step(
                 ren_cfg = env.reward_manager.get_term_cfg("energy")
                 ren_sums = ren_sums_all[env_ids_t]
                 per_env_ren = (ren_sums / ep_len / max(float(ren_cfg.weight), 1e-6)).clamp(0.0, 1.0)
-                bins_ren = cmd.env_bin_idx[env_ids_t]
+                bins_ren = _bin_src[env_ids_t]
                 if keep is not None:
                     per_env_ren = per_env_ren[keep]
                     bins_ren = bins_ren[keep]

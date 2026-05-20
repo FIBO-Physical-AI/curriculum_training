@@ -1,0 +1,62 @@
+\documentclass[a4paper,11pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage{geometry}
+\usepackage{fancyhdr}
+\usepackage{hyperref}
+\usepackage{cite}
+\usepackage{bm}
+\usepackage{microtype}
+\usepackage{algorithm}
+\usepackage{algorithmic}
+\usepackage{needspace}
+\usepackage{titlesec}
+
+\geometry{left=1.2cm, right=1.2cm, top=2.5cm, bottom=2.5cm}
+
+\widowpenalty=10000
+\clubpenalty=10000
+
+\titlespacing*{\section}{0pt}{12pt plus 2pt minus 2pt}{6pt plus 2pt minus 2pt}[0pt]
+\titlespacing*{\subsection}{0pt}{10pt plus 2pt minus 2pt}{4pt plus 2pt minus 2pt}[0pt]
+
+\titleformat{\section}{\needspace{10\baselineskip}\normalfont\Large\bfseries}{\thesection}{1em}{}
+\titleformat{\subsection}{\needspace{8\baselineskip}\normalfont\large\bfseries}{\thesubsection}{1em}{}
+
+\pagestyle{fancy}
+\fancyhf{}
+\lhead{Curriculum Learning for Velocity Tracking on the Unitree Go2}
+\rhead{Phakin Boonchanachai}
+\lfoot{\today}
+\rfoot{\thepage}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{6pt}
+
+\begin{document}
+
+\begin{center}
+\Large\textbf{Curriculum Learning for Velocity Tracking on the Unitree Go2 Quadruped}
+\end{center}
+
+\vspace{0.3cm}
+
+\begin{tabular}{@{}ll}
+Author  & Phakin Boonchanachai (66340500037) \\
+Course  & FRA503 Deep Reinforcement Learning \\
+\end{tabular}
+
+\vspace{0.5cm}
+
+\input{sec1_intro}
+\input{sec2_background}
+\input{sec3_methodology}
+\input{sec4_results}
+\input{sec5_conclusion}
+
+\end{document}

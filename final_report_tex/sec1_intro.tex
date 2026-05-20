@@ -1,0 +1,85 @@
+\section{Introduction}
+
+\subsection{Motivation}
+
+The Unitree Go2 is a small quadruped robot. To be useful in the field, it needs a single controller that works across a wide speed range, from a standstill up to a sprint at around 4 m/s. A controller that only runs at one fixed speed is not practical for real deployment.
+
+Modern locomotion controllers are usually trained with deep reinforcement learning (DRL). A neural-network policy is trained in simulation against a reward that depends on how well it tracks a commanded velocity, and the trained policy is then transferred to hardware \cite{rudin2022}. Recent simulators such as Isaac Lab \cite{mittal2023} make this practical on a single workstation by running thousands of robots in parallel.
+
+Training one policy across a wide speed range is not the same as training a policy at a single target speed. The control problem is harder at high speed than at low speed:
+\begin{itemize}
+  \item At low speed, the robot can balance easily. The reward signal is dense and the policy learns from the very first iteration.
+  \item At high speed, the dynamics change. Ground reaction forces grow, the gait pattern has to shift from walk to trot to run, and the robot is more likely to fall over.
+\end{itemize}
+
+If velocity commands are sampled uniformly across the full range from the start of training, most high-speed commands return almost no reward, because the policy cannot yet run and fails immediately. The gradient is dominated by these useless failures, and the policy ends up specialising on the easy low-speed end of the range while never learning the sprint end \cite{margolis2022}.
+
+This is the \textit{sparse-signal problem} at high speed, and it motivates \textbf{curriculum learning}: actively choosing which velocity commands the policy sees during training, so that compute is spent where the policy can still make progress.
+
+Two different curriculum philosophies have appeared in the recent quadrupedal-locomotion literature:
+\begin{itemize}
+  \item \textbf{Box Adaptive} \cite{margolis2022}. Start at low velocity. Expand the sampling window outward only after each bin's tracking reward crosses a mastery threshold. The rule only adds weight to bins; it never removes weight.
+  \item \textbf{LP-ACRL} \cite{li2026}. Reallocate sampling mass continuously using a softmax over per-task learning progress. When a bin stops improving, its weight is automatically reduced and reallocated to bins that are still improving.
+\end{itemize}
+
+Although both rules have been published individually (Box Adaptive on the MIT Mini Cheetah, LP-ACRL on the ANYmal D), no matched comparison of the two has been reported on the Unitree Go2, to the author's knowledge.
+
+\begin{quote}
+\textbf{Terminology used throughout this report.} Following the naming used in the project's implementation, the Box Adaptive rule of Margolis et al.\ (2022) is referred to as the \textit{task-specific} curriculum, and the LP-ACRL rule of Li, Li, \& Hutter (2026) as the \textit{teacher-guided} curriculum. The baseline that gives every bin the same sampling probability is referred to as the \textit{uniform} condition. All later chapters use these three names (\textit{uniform}, \textit{task-specific}, \textit{teacher-guided}) when referring to the conditions of the matched comparison.
+\end{quote}
+
+There is also a hardware-safety reason to care about which curriculum strategy is used. The Go2's joint motors have finite torque and velocity limits. A policy that solves the simulated tracking reward by spinning its legs at unphysical speeds, or by snapping its feet down at uncontrolled action rates, will damage the robot once deployed. The curriculum does not just decide \textit{which} speeds are learned. It also shapes \textit{how} they are learned.
+
+\subsection{Problem Statement}
+
+This report trains and evaluates a single PPO policy \cite{schulman2017} on the Unitree Go2 to track forward velocity commands across the range $v_x^{\mathrm{cmd}} \in [0, 4]$ m/s in simulation.
+\begin{itemize}
+  \item Lateral velocity command $v_y^{\mathrm{cmd}}$ is fixed at $0$.
+  \item Yaw-rate command $\omega_z^{\mathrm{cmd}}$ is fixed at $0$.
+  \item The forward range is split into $N = 8$ bins of width $\Delta v = 0.5$ m/s.
+\end{itemize}
+
+The central question: \textbf{which command-sampling strategy lets the single policy reach the high-velocity bins under a fixed training budget on a flat-ground simulation of the Go2?}
+
+\subsection{Objectives}
+
+\begin{itemize}
+  \item \textbf{O1.} Implement three velocity-command sampling strategies for a single PPO policy on the Go2 in Isaac Lab:
+    \begin{itemize}
+      \item \textit{Uniform}: a baseline that gives every bin the same sampling probability throughout training.
+      \item \textit{Task-specific}: Box Adaptive \cite{margolis2022}.
+      \item \textit{Teacher-guided}: LP-ACRL \cite{li2026}.
+    \end{itemize}
+  \item \textbf{O2.} Run a matched comparison of the three strategies across three independent random seeds on $[0, 4]$ m/s partitioned into $8$ bins. All non-curriculum components (reward, observations, terminations, PPO hyperparameters, domain randomisation) are held fixed across conditions.
+  \item \textbf{O3.} Evaluate the three strategies using four per-bin metrics: mean tracking reward, EPTE-SP (expected per-step tracking error normalised by commanded speed), task-sampling distribution over training, and iterations-to-mastery.
+\end{itemize}
+
+\subsection{Scope and Limitations}
+
+The work is bounded as follows.
+\begin{itemize}
+  \item \textbf{Velocity axis.} Only the forward velocity command is studied. Lateral velocity and yaw rate are fixed at zero throughout training and evaluation.
+  \item \textbf{Terrain.} Training and evaluation are on a flat ground plane. No terrain generator, no height scanner, no terrain-difficulty curriculum.
+  \item \textbf{Simulation only.} All experiments run in Isaac Lab. No sim-to-real transfer or hardware deployment is attempted in this report.
+  \item \textbf{Single platform.} Only the Unitree Go2 is used. No cross-platform validation against other quadrupeds.
+  \item \textbf{Single algorithm.} PPO is the only RL algorithm used. No comparison against alternative policy-optimisation methods.
+  \item \textbf{Single-run cells.} Each (curriculum, seed) cell is run once. The matched comparison uses three seeds per condition; broader hyperparameter sweeps are out of scope.
+\end{itemize}
+
+\subsection{Contributions}
+
+This report contributes:
+\begin{itemize}
+  \item A matched three-way comparison of the uniform baseline, task-specific (Box Adaptive; \cite{margolis2022}), and teacher-guided (LP-ACRL; \cite{li2026}) sampling strategies on the Unitree Go2 across $[0, 4]$ m/s, with every non-curriculum component held fixed across conditions.
+  \item A per-bin analysis of tracking accuracy and learning progress for each condition, including evidence on which strategies reach the high-velocity bins under the fixed iteration budget and which fail.
+  \item A discussion of where the observed task-sampling distributions and iterations-to-mastery patterns agree or diverge from the hypotheses underlying the two published curriculum rules.
+\end{itemize}
+
+\subsection{Structure of the Report}
+
+The remainder of the report is organised as follows.
+\begin{itemize}
+  \item \textbf{Chapter 2: Background.} Deep RL for legged locomotion. The two curriculum strategies under comparison. The gait-taxonomy framework used later in the report to interpret locomotion behaviour.
+  \item \textbf{Chapter 3: Methodology.} Experimental design, robot and simulator setup, reward function, command space, curriculum operator parameters, PPO hyperparameters, and evaluation metrics.
+  \item \textbf{Chapter 4: Results and discussion.} Quantitative results for the three curricula, followed by discussion.
+\end{itemize}

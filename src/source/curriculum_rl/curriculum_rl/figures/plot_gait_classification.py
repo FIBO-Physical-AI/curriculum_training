@@ -371,6 +371,53 @@ def _classify_majority(
     return most, mean_score, rep_key
 
 
+def _pick_best_for_bin(
+    files: list[Path],
+    bin_idx: int,
+) -> tuple[np.ndarray, int, int, float, float] | None:
+    """Pick (contact, rollout_idx, alive_steps, v_cmd, sim_dt) across all seed files.
+
+    Mirrors plot_gait_diagram._pick_seed_and_rollout: prefer full-episode survivors,
+    break ties by closeness to v_cmd, then prefer longer episodes across seeds.
+    """
+    best: tuple[np.ndarray, int, int, float, float, float] | None = None
+    # stored as (contact, r, alive, err, v_cmd, sim_dt)
+    for path in files:
+        z = np.load(path)
+        key_c = f"contact_b{bin_idx}"
+        key_vx = f"vx_b{bin_idx}"
+        if key_c not in z.files or key_vx not in z.files:
+            continue
+        contact = z[key_c]
+        vx = z[key_vx]
+        key_vc = f"vcmd_b{bin_idx}"
+        v_cmd = float(z[key_vc]) if key_vc in z.files else 0.0
+        sim_dt = float(z["sim_dt"]) if "sim_dt" in z.files else 0.02
+        key_fs = f"fall_step_b{bin_idx}"
+        fall = z[key_fs] if key_fs in z.files else np.full(
+            contact.shape[0], contact.shape[1], dtype=np.int32
+        )
+        n_steps = contact.shape[1]
+        survives = fall >= n_steps
+        if survives.any():
+            idx = np.where(survives)[0]
+            means = np.array([vx[i, :n_steps].mean() for i in idx])
+            best_local = int(idx[np.argmin(np.abs(means - v_cmd))])
+            alive = int(fall[best_local])
+            err = float(abs(means[np.argmin(np.abs(means - v_cmd))] - v_cmd))
+        else:
+            best_local = int(np.argmax(fall))
+            alive = int(fall[best_local])
+            err = float(abs(vx[best_local, :alive].mean() - v_cmd)) if alive > 0 else float("inf")
+        cand = (contact, best_local, alive, err, v_cmd, sim_dt)
+        if best is None or alive > best[2] or (alive == best[2] and err < best[3]):
+            best = cand
+    if best is None:
+        return None
+    contact, r, alive, err, v_cmd, sim_dt = best
+    return contact, r, alive, v_cmd, sim_dt
+
+
 def _draw_observed(ax, contact_window: np.ndarray, sim_dt: float) -> None:
     n_show = contact_window.shape[0]
     t = np.arange(n_show) * sim_dt
@@ -422,7 +469,7 @@ def plot_gait_classification(
     traces_dir: Path,
     out_path: Path,
     num_bins: int = 8,
-    t_window_s: float = 1.5,
+    t_window_s: float = 3.0,
 ) -> None:
     cond_to_files = _find_traces(traces_dir)
     if not cond_to_files:
@@ -447,26 +494,13 @@ def plot_gait_classification(
 
     for ri, cond in enumerate(conditions):
         files = cond_to_files[cond]
-        z = np.load(files[0])
-        sim_dt = float(z["sim_dt"]) if "sim_dt" in z.files else 0.02
         for b in range(num_bins):
             ax = axes[ri, b]
-            key_c = f"contact_b{b}"
-            key_vx = f"vx_b{b}"
-            key_vc = f"vcmd_b{b}"
-            if key_c not in z.files:
+            best = _pick_best_for_bin(files, b)
+            if best is None:
                 ax.set_axis_off()
                 continue
-            contact = z[key_c]
-            vx = z[key_vx]
-            v_cmd = float(z[key_vc]) if key_vc in z.files else 0.0
-            key_fs = f"fall_step_b{b}"
-            if key_fs in z.files:
-                fall = z[key_fs]
-            else:
-                fall = np.full(contact.shape[0], contact.shape[1], dtype=np.int32)
-            r, alive_steps = _pick_rollout(contact, vx, v_cmd, fall)
-            gait, score, tmpl_key = _classify_majority(contact, fall)
+            contact, r, alive_steps, v_cmd, sim_dt = best
 
             if alive_steps < MIN_ALIVE_STEPS_FOR_CLASSIFICATION:
                 ax.text(0.5, 0.5, "n/a (short episode)", transform=ax.transAxes,
@@ -479,6 +513,13 @@ def plot_gait_classification(
 
             n_show = min(int(t_window_s / sim_dt), alive_steps)
             window = contact[r, :n_show].astype(bool)
+
+            # classify exactly the window shown — same rollout, same duration as diagram
+            res = classify_gait_2d(window)
+            gait = res["label"]
+            score = float(res["score"])
+            tmpl_key = res["template_key"]
+
             fl_window = window[:, 0]
             period_steps = _stride_period(fl_window)
             fl_offset = _first_stance(fl_window)
@@ -531,7 +572,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--traces-dir", type=Path, default=Path("src/results/eval_traces"))
     parser.add_argument("--out", type=Path, default=Path("src/results/figures/gait_classification.png"))
     parser.add_argument("--num-bins", type=int, default=8)
-    parser.add_argument("--t-window", type=float, default=1.5)
+    parser.add_argument("--t-window", type=float, default=3.0)
     args = parser.parse_args(argv)
     plot_gait_classification(args.traces_dir, args.out, num_bins=args.num_bins,
                              t_window_s=args.t_window)

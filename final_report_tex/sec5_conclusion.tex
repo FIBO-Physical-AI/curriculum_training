@@ -1,0 +1,62 @@
+\section{Conclusion}
+
+Three velocity-command sampling rules were compared on a single PPO policy on the Unitree Go2 across $[0,\,4]$ m/s, under two rewards. The three rules are uniform, task-specific (Box Adaptive, \cite{margolis2022}), and teacher-guided (LP-ACRL, \cite{li2026}). The two rewards are the \textit{sprint-retune} reward of \S3.1.4 and the \textit{energy-regularised} reward of Liang et al.\ (2024) with Go2-calibrated scales (\S4.2).
+
+Findings:
+
+\begin{itemize}
+  \item \textbf{Separation lives at the sprint bins. Bins 0 through 5 are indistinguishable.} Under both rewards, all three conditions reach the same per-bin tracking-reward plateau on bins 0--4 (commands up to $2.5$ m/s) and are within seed-noise of each other on per-bin EPTE-SP through bin 5. The operator effect is concentrated at $b_6$ and $b_7$.
+
+  \item \textbf{Curriculum decides survival. Reward decides velocity at the sprint bin.} Under the sprint-retune reward, uniform is the only condition that does not master $b_6$ or $b_7$ (Tables \ref{tab:phase1_rlin}, \ref{tab:phase1_itm}) and falls in $98$--$100\%$ of deterministic rollouts there (Table \ref{tab:phase1_epte}). Task-specific and teacher-guided both clear $\gamma = 0.7$ at both sprint bins, though task-specific still falls $50\%$ of the time at $b_6$/$b_7$ while teacher-guided falls only $13\%$/$17\%$. Under the energy-regularised reward the fall fraction collapses to zero across all three conditions at every bin (Table \ref{tab:phase2_epte}). What separates the operators is then the velocity the policy will accept the command at. At $b_7$ the deterministic measured velocity is $\bar v_x = 3.29$ m/s for teacher-guided, $2.31$ m/s for task-specific, and $0.54$ m/s for uniform, against a $3.75$ m/s command (\S4.3.2). Uniform under the energy reward solves survival at the sprint bin but not the velocity. It produces a slow Trot instead of sprinting (\S4.3.4).
+
+  \item \textbf{The split is curriculum-vs-uniform, not task-spec-vs-teacher.} On both rewards, task-specific and teacher-guided are within seed-noise on per-bin $R_j$ at $b_6$ and $b_7$ (Tables \ref{tab:phase1_rlin}, \ref{tab:phase2_rlin}). Their iterations-to-mastery profiles differ. Task-specific reaches the unlocked edge faster on bins 0 through 6, while teacher-guided masters $b_7$ first under the energy reward ($1026$ vs $1212$, Table \ref{tab:phase2_itm}). Teacher-guided holds Trot (walking) at the sprint bin under the energy reward; task-specific shows Trot in two of three seeds, with the best-surviving seed exhibiting Bound (walking) at the sprint bins (\S4.3.4). Uniform is the outlier under both rewards.
+
+  \item \textbf{Gait family on the Go2 within budget: Trot (walking) dominant, all walking.} Every (condition, bin) cell under the energy-regularised reward has duty factor $\beta > 0.5$ (Table \ref{tab:phase2_duty}), so all contact patterns are \textit{walking} gaits in the Hildebrand sense. The dominant pattern across all three conditions and all eight bins is Trot (walking) --- diagonal-pair alternation with no flight phase. One seed of task-specific curriculum (seed 2) exhibits a Trot $\to$ Walk $\to$ Bound progression at bins 2--7, with the fore-pair/hind-pair Bound pattern persisting to the sprint bin ($\bar v_x = 2.31$ m/s, $\beta = 0.59$); the other two seeds show Trot (walking) throughout (Table \ref{tab:phase2_gait}).
+\end{itemize}
+
+A few caveats apply. Each (condition, seed) is a single run, and spreads are across three seeds, not three replicates. The 3000-iteration budget is short relative to standard practice in this literature (\cite{margolis2022} trained at the equivalent of $\sim 12000$ iterations on this scale of robot), so the uniform-at-$b_7$ collapse is a budget-bound failure, not necessarily asymptotic. All experiments are flat-ground simulation on a single platform. Transfer to terrain, other quadrupeds, or hardware is not claimed.
+
+Within those bounds, the curriculum operator is the binding constraint on whether a single PPO policy on the Go2 covers $[0,\,4]$ m/s within budget. Any sampler that allocates non-trivial compute to the highest bin, whether Box Adaptive or LP-ACRL, is sufficient to do so. Uniform sampling is not.
+
+\begin{thebibliography}{99}
+
+\bibitem{li2026}
+Li, Z., Li, C., \& Hutter, M. (2026).
+Scaling rough terrain locomotion with automatic curriculum reinforcement learning.
+\textit{arXiv:2601.17428}.
+
+\bibitem{fu2022}
+Fu, Z., Kumar, A., Malik, J., \& Pathak, D. (2022).
+Minimizing energy consumption leads to the emergence of gaits in legged robots.
+\textit{Conference on Robot Learning} (pp.\ 928--937).
+
+\bibitem{liang2024}
+Liang, Z., Sun, Y., Zhu, K., Zhang, Y., Xiong, S., Wang, Z., Li, R., Sreenath, K., \& Tomizuka, M. (2024).
+Adaptive energy regularization for autonomous gait transition and energy-efficient quadruped locomotion.
+\textit{arXiv:2403.20001v2}.
+
+\bibitem{margolis2022}
+Margolis, G. B., Yang, G., Paigwar, K., Chen, T., \& Agrawal, P. (2022).
+Rapid locomotion via reinforcement learning.
+\textit{Robotics: Science and Systems}.
+
+\bibitem{mittal2023}
+Mittal, M., Yu, C., Yu, Q., Liu, J., Rudin, N., Hoeller, D., Yuan, J. L., Singh, R., Guo, Y., Mazhar, H., Mandlekar, A., Babich, B., Birchfield, S., Hutter, M., \& Garg, A. (2023).
+Orbit: A unified simulation framework for interactive robot learning environments.
+\textit{IEEE Robotics and Automation Letters}, 8(6), 3740--3747.
+
+\bibitem{rudin2022}
+Rudin, N., Hoeller, D., Reist, P., \& Hutter, M. (2022).
+Learning to walk in minutes using massively parallel deep reinforcement learning.
+\textit{Conference on Robot Learning} (pp.\ 91--100).
+
+\bibitem{schulman2017}
+Schulman, J., Wolski, F., Dhariwal, P., Radford, A., \& Klimov, O. (2017).
+Proximal policy optimization algorithms.
+\textit{arXiv:1707.06347}.
+
+\bibitem{unitree2024}
+Unitree Robotics. (2024).
+\textit{unitree\_rl\_lab} [Software]. GitHub.
+
+\end{thebibliography}

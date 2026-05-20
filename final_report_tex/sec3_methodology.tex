@@ -1,0 +1,183 @@
+\section{Methodology}
+
+This chapter specifies the concrete experimental setting under which the three curricula of Chapter 2 are compared. The setting has four parts: the simulator and command space, the reward configuration actually used in this work (which deviates from the upstream Go2 defaults of \S2.3.2 for a reason that is derived below), the three curriculum conditions, and the evaluation protocol. A consolidated hyperparameter summary is given at the end of the chapter.
+
+\subsection{Experimental Setup and Reward Configuration}
+
+\subsubsection{Simulator, Training Budget, and Parallelism}
+
+All experiments are run in Isaac Lab on a single workstation with 4096 parallel environments collecting rollouts in lockstep. Each PPO update consumes a batch of 24 environment steps per env, and training runs for 3000 PPO iterations per (condition, seed). Three independent random seeds are drawn for every condition, so each curriculum is compared on three runs and reported statistics are taken across seeds.
+
+The 3000-iteration budget is half of what a longer pilot run at 6000 iterations had used, and is short by the standard of comparable wide-range velocity-tracking studies. The choice is a wall-clock compromise: a three-condition, three-seed sweep at 3000 iterations at 4096 envs occupies one GPU for roughly nine hours per reward configuration (about 36 minutes per (condition, seed) cell at this batch size), and the experimental design of this report requires two such sweeps (one for the sprint-retune reward of \S3.1.4, one for the energy-regularised reward of \S4.2). Where the 3000-iteration budget visibly truncates a learning curve before it plateaus, this is flagged in \S4.1 and \S4.3.
+
+\subsubsection{Velocity Command Space}
+
+The robot is given a command vector $(v_x^{\mathrm{cmd}}, v_y^{\mathrm{cmd}}, \omega_z^{\mathrm{cmd}})$. The lateral and yaw components are held at zero in both training and evaluation:
+
+\[
+v_y^{\mathrm{cmd}} = 0, \qquad \omega_z^{\mathrm{cmd}} = 0.
+\]
+
+The forward command is discretised into eight contiguous bins of width $0.5$ m/s spanning the full velocity envelope:
+
+\[
+B_0 = [0.0,\, 0.5),\ B_1 = [0.5,\, 1.0),\ \ldots,\ B_6 = [3.0,\, 3.5),\ B_7 = [3.5,\, 4.0].
+\]
+
+Bin 7 is closed on the right so that the upper bound $4.0$ m/s is sampleable. Each bin index $j \in \{0, 1, \ldots, 7\}$ defines a per-bin task in the sense of \S2.2: the per-bin tracking reward, per-bin success threshold, and per-bin learning-progress signal used by the two curricula are all computed over the eight bins defined here. The command is resampled every 20 simulated seconds, and the fraction of environments holding a standing-still command is set to zero (the upstream default of 10 percent stand-still environments was removed to keep all training samples on the discrete bin grid).
+
+\subsubsection{Action Interface and Observation}
+
+The policy emits a 12-dimensional joint position action $a_t$. Joint targets are computed as $q^{\mathrm{target}} = q^{\mathrm{default}} + s \cdot a_t$, with action scale $s$. The upstream scale of $0.25$ is retained for every joint except that the scalar $s$ itself is raised from the upstream value:
+
+\[
+s : \quad 0.25 \;\longrightarrow\; 0.35.
+\]
+
+The upstream scale of $0.25$ is too small for the leg-swing amplitude that a $4$ m/s sprint requires; raising it to $0.35$ gives the policy enough joint-angle range per step to produce a sprint-speed stride. PD gains, torque envelope, friction defaults, and action clip are all inherited from the upstream Unitree Go2 configuration without change.
+
+The policy observation is six terms (base angular velocity, projected gravity, velocity command, joint position relative to default, joint velocity relative to default, last action), each scaled and noised exactly as in the upstream configuration. The critic observation adds two privileged terms (base linear velocity, joint effort). All observations are clipped to $\pm 100$. The domain-randomisation block (friction, restitution, base mass perturbation, reset pose, push events) is inherited from the upstream Go2 configuration unchanged.
+
+\subsubsection{Reward Configuration and the Standing-Still Derivation}
+
+The 16-term reward of \S2.3.2 is the starting point. Five of the 16 weights are modified for this work; the remaining eleven are inherited from upstream without change. The motivation for the five modifications is a structural failure of the upstream weighting under the stretched command range $[0, 4]$ m/s, derived below.
+
+\textbf{The standing-still local optimum.} Recall from \S2.3.2 that the per-step reward decomposes as
+
+\[
+r_t = w_{\mathrm{lin}}\, r_{\mathrm{lin}} + w_{\mathrm{ang}}\, r_{\mathrm{ang}} + r_{\mathrm{smooth}} + r_{\mathrm{rest}},
+\]
+
+with $w_{\mathrm{lin}} = 1.5$, $w_{\mathrm{ang}} = 0.75$, and $r_{\mathrm{smooth}} \le 0$ summing the four smoothness and effort penalties. The two tracking kernels each saturate at $1$, so the maximum tracking contribution is $w_{\mathrm{lin}} + w_{\mathrm{ang}} = 2.25$.
+
+The smoothness magnitude $|r_{\mathrm{smooth}}|$ grows roughly with the square of the commanded velocity: faster commands force faster joint motion, larger torques, and larger step-to-step action changes. Under the upstream weights, $|r_{\mathrm{smooth}}|$ at sprint commands near $4$ m/s exceeds the tracking ceiling of $2.25$. The consequence is a binary comparison at sprint commands:
+
+\begin{itemize}
+  \item \textit{If the policy actually runs at the commanded speed.} The two tracking terms saturate at $r_{\mathrm{lin}} + r_{\mathrm{ang}} \approx 2.25$. The smoothness term satisfies $|r_{\mathrm{smooth}}| > 2.25$. Therefore $r_t < 0$.
+  \item \textit{If the policy stands still.} Joint velocities, accelerations, torques, and action rates are near zero, so $r_{\mathrm{smooth}} \approx 0$. The yaw command is zero (above), so $r_{\mathrm{ang}}$ saturates at $1$ even when the body is stationary. Therefore $r_t \approx w_{\mathrm{ang}} \cdot 1 = 0.75 > 0$.
+\end{itemize}
+
+The standing-still solution is preferred by the policy gradient over the sprint solution, and a uniform initial sampling over $[0, 4]$ m/s converges to a policy that stands still under every command. The fix is to reduce the magnitudes of the four smoothness weights so that the smoothness penalty at the commanded sprint speed no longer exceeds the tracking ceiling.
+
+\textbf{Sprint-retune weights.} The four smoothness weights are reduced one order of magnitude, and the feet-air-time threshold is reduced from $0.5$ s to $0.1$ s. The fifth modification (feet-air-time threshold) is included here because the upstream threshold of $0.5$ s rewards only foot swings longer than half a second, which is incompatible with the higher stride frequency that running near $4$ m/s requires.
+
+\begin{table}[ht]
+\centering
+\begin{tabularx}{\textwidth}{@{}X r r X@{}}
+\toprule
+\textbf{Reward term} & \textbf{Upstream} & \textbf{Sprint-retune} & \textbf{What this term penalises} \\
+\midrule
+Joint velocity squared      & $-1 \times 10^{-3}$ & $-1 \times 10^{-4}$ & $\|\dot{q}\|^2$ \\
+\addlinespace
+Joint acceleration squared  & $-2.5 \times 10^{-7}$ & $-1 \times 10^{-7}$ & $\|\ddot{q}\|^2$ \\
+\addlinespace
+Joint torque squared        & $-2 \times 10^{-4}$ & $-2 \times 10^{-5}$ & $\|\tau\|^2$ \\
+\addlinespace
+Action rate squared         & $-0.1$ & $-0.005$ & $\|a_t - a_{t-1}\|^2$ \\
+\addlinespace
+Feet-air-time threshold     & $0.5$ s & $0.1$ s & minimum swing duration for the air-time bonus \\
+\bottomrule
+\end{tabularx}
+\caption{The five reward modifications relative to the upstream Go2 configuration. The remaining eleven of the 16 terms (linear and angular velocity tracking, orientation, height stability, contact bonuses other than feet-air-time, and termination penalties) are kept at upstream weights.}
+\label{tab:sprint_retune}
+\end{table}
+
+The combined effect of the four weight reductions is that $|r_{\mathrm{smooth}}|$ at sprint commands is brought back below the tracking ceiling of $2.25$, so that an actually-running policy receives a positive total reward and the standing-still solution is no longer the gradient-preferred local optimum. Every experiment reported in Chapter 4 is run on this modified reward configuration.
+
+\subsection{The Three Curriculum Conditions}
+
+All three conditions share \S3.1 exactly. They differ only in how the sampling distribution $c_j(\zeta)$ over the eight bins evolves during training. A shared heartbeat is used: every 48 environment steps (one \textit{tick}, equal to two PPO iterations at rollout length 24), the per-bin tracking reward buffers are flushed to the active curriculum operator and the sampling distribution for the next tick is recomputed.
+
+\subsubsection{Uniform (Baseline)}
+
+The sampling distribution is fixed at the uniform distribution over all eight bins for the full 3000 iterations:
+
+\[
+c_j(\zeta) = \frac{1}{N} = \frac{1}{8}, \quad j = 0, 1, \ldots, 7.
+\]
+
+No mastery signal is computed and no support expansion or reallocation occurs. This is the no-curriculum baseline.
+
+\subsubsection{Box Adaptive (Task-Specific)}
+
+The Box Adaptive operator of \S2.2.1 is initialised with active support $\mathcal{A}_0 = \{0\}$, the first bin only. On every tick, the smoothed mean tracking reward of every active bin is compared against the success threshold
+
+\[
+\gamma = 0.7.
+\]
+
+When the active bin $b$ at the top of the support crosses $\gamma$, the support is grown to $\mathcal{A} \cup \{b-1, b, b+1\}$ following eqs.\ (10a) and (10b) of Margolis et al.\ (2022). Sampling within $\mathcal{A}$ is uniform. To prevent the threshold-crossing rule from triggering on a single lucky episode, the mastery check is gated by a minimum of 50 episodes collected in the candidate bin before the per-bin mean is consulted. This min-episode gate is an implementation detail of the operator and does not appear in the Margolis paper.
+
+\subsubsection{LP-ACRL (Teacher-Guided)}
+
+The LP-ACRL operator of \S2.2.2 buffers per-bin reward signals on every tick but recomputes the sampling distribution only every $M = 50$ ticks. With $M = 50$ ticks of 48 env steps each at rollout length 24, one re-weight cycle equals exactly 100 PPO iterations, matching the stage length used by Li et al.\ (2026). At each re-weight, the per-bin learning progress $\mathrm{LP}_j$ is computed from the difference between the current and the previous stage's per-bin reward, the softmax weights are formed from $\mathrm{LP}_j$ at temperature
+
+\[
+\beta = 0.05,
+\]
+
+and a uniform-mixture floor is applied at
+
+\[
+\varepsilon = 0.15
+\]
+
+so that the final sampling distribution is $c_j = (1 - \varepsilon)\, \mathrm{softmax}_j(\mathrm{LP}/\beta) + \varepsilon / N$. With $N = 8$, the floor sets the minimum per-bin probability at $\varepsilon / N \approx 1.9\%$.
+
+\subsection{Evaluation Protocol}
+
+After training, every policy is evaluated under deterministic action selection (mean of the policy Gaussian, no noise) on each of the eight bins independently. For each bin the policy is rolled out for a fixed number of episodes. The unit of comparison is the per-bin pair (condition, bin). With 8 bins, 3 conditions, and 3 seeds, the sweep produces 72 per-bin evaluation cells in total. The following scalar quantities are recorded from each rollout.
+
+\begin{itemize}
+  \item \textbf{Per-bin tracking reward.} The episode-averaged value of $r_{\mathrm{lin}}$ in bin $j$, denoted $R_j$. Reported as the mean and standard deviation across the three seeds.
+  \item \textbf{EPTE-SP (Episodic Percentage Tracking Error with Stability Penalty).} Defined by Li et al.\ (2026, eq.\ 8). For a single rollout of length $T$ with commanded velocity $v^{\mathrm{cmd}}$ and measured forward velocity $v_x(t)$, the episodic tracking error percentage is the time-averaged absolute relative error, and the stability penalty adds a fixed penalty for any episode that terminates by falling. EPTE-SP is reported per bin (mean across seeds and across episodes).
+  \item \textbf{Sampling heatmap.} For each curriculum condition, the matrix $c_j(\mathrm{iter})$ giving the per-bin sampling probability at every PPO iteration is logged during training. The heatmap is the visual signature of how each operator allocates compute.
+  \item \textbf{Iterations-to-mastery.} For each (condition, bin) cell, the first PPO iteration at which the smoothed per-bin $R_j$ crosses $\gamma = 0.7$. Bins that never cross the threshold within the 3000-iteration budget are recorded as ``not mastered.'' This is the metric on which Box Adaptive and LP-ACRL are scored against the uniform baseline at sprint commands.
+\end{itemize}
+
+\subsection{Hyperparameter Summary}
+
+Table \ref{tab:hyperparams} collects every hyperparameter whose value matters for reproducibility. Values inherited from the upstream Go2 configuration without change are marked ``upstream.'' Values that differ from upstream are listed explicitly.
+
+\begin{table}[ht]
+\centering
+\begin{tabularx}{\textwidth}{@{}l l r@{}}
+\toprule
+\textbf{Group} & \textbf{Hyperparameter} & \textbf{Value} \\
+\midrule
+Simulator  & Parallel environments & $4096$ \\
+Simulator  & Rollout length $T$ (env steps per PPO update) & $24$ \\
+Simulator  & Total PPO iterations & $3000$ \\
+Simulator  & Seeds per condition & $3$ \\
+\addlinespace
+Command    & Bins $N$, bin width $\Delta v$, $V_{\max}$ & $8$, $0.5$ m/s, $4.0$ m/s \\
+Command    & Lateral and yaw command & $v_y^{\mathrm{cmd}} = 0$, $\omega_z^{\mathrm{cmd}} = 0$ \\
+Command    & Resampling interval & $20$ s \\
+Command    & Stand-still environment fraction & $0$ \\
+\addlinespace
+Action     & Joint position action scale $s$ & $0.35$ (upstream $0.25$) \\
+Action     & PD gains, torque envelope, action clip & upstream \\
+\addlinespace
+Reward     & $w_{\mathrm{lin}}$, $\sigma_{\mathrm{lin}}$ & $1.5$, $0.5$ m/s \\
+Reward     & $w_{\mathrm{ang}}$, $\sigma_{\mathrm{ang}}$ & $0.75$, $0.25$ rad/s \\
+Reward     & $w_{\dot{q}}$ (joint velocity squared) & $-1 \times 10^{-4}$ (upstream $-1 \times 10^{-3}$) \\
+Reward     & $w_{\ddot{q}}$ (joint acceleration squared) & $-1 \times 10^{-7}$ (upstream $-2.5 \times 10^{-7}$) \\
+Reward     & $w_{\tau}$ (joint torque squared) & $-2 \times 10^{-5}$ (upstream $-2 \times 10^{-4}$) \\
+Reward     & $w_{\Delta a}$ (action rate squared) & $-0.005$ (upstream $-0.1$) \\
+Reward     & Feet-air-time threshold & $0.1$ s (upstream $0.5$ s) \\
+Reward     & Other 11 of 16 weights & upstream \\
+\addlinespace
+PPO        & Clip $\varepsilon_{\mathrm{PPO}}$, learning rate, GAE $\lambda$, discount $\gamma_{\mathrm{disc}}$, epochs, mini-batches & upstream \\
+\addlinespace
+Curriculum (shared)          & Tick (env steps between operator updates) & $48$ \\
+Curriculum (task-specific)   & Success threshold $\gamma$ & $0.7$ \\
+Curriculum (task-specific)   & Seed bin & bin $0$ \\
+Curriculum (task-specific)   & Minimum episodes before mastery check & $50$ \\
+Curriculum (teacher-guided)  & Temperature $\beta$ & $0.05$ \\
+Curriculum (teacher-guided)  & Stage length $M$ (ticks per re-weight) & $50$ \\
+Curriculum (teacher-guided)  & Uniform mixture floor $\varepsilon$ & $0.15$ \\
+\bottomrule
+\end{tabularx}
+\caption{Consolidated hyperparameter summary. The five reward modifications, the action scale, and all curriculum operator knobs are listed explicitly; everything else not listed inherits the upstream Unitree Go2 configuration.}
+\label{tab:hyperparams}
+\end{table}

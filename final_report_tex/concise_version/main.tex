@@ -15,6 +15,7 @@
     \usepackage{needspace}
     \usepackage{titlesec}
 \usepackage{float}
+    \usepackage{caption}
 
     \geometry{left=1.2cm, right=1.2cm, top=2.5cm, bottom=2.5cm}
 
@@ -106,45 +107,43 @@
 
     Tables~\ref{tab:phase1_rlin} and \ref{tab:phase1_itm} report per-bin tracking reward and iterations-to-mastery at end of training.
 
-    \begin{table}[ht]
-    \centering
+    \begin{center}
     \begin{tabular}{@{}r r c c c@{}}
     \toprule
     \textbf{Bin} & $v_x^{\mathrm{cmd}}$ & \textbf{Uniform} & \textbf{Task-specific} & \textbf{Teacher-guided} \\
     \midrule
-    0 & 0.25 m/s & $0.927 \pm 0.003$ & $0.925 \pm 0.005$ & $0.922 \pm 0.005$ \\
-    1 & 0.75 m/s & $0.920 \pm 0.001$ & $0.917 \pm 0.006$ & $0.918 \pm 0.003$ \\
-    2 & 1.25 m/s & $0.913 \pm 0.002$ & $0.911 \pm 0.008$ & $0.914 \pm 0.003$ \\
-    3 & 1.75 m/s & $0.904 \pm 0.002$ & $0.901 \pm 0.008$ & $0.904 \pm 0.003$ \\
-    4 & 2.25 m/s & $0.892 \pm 0.002$ & $0.888 \pm 0.008$ & $0.890 \pm 0.002$ \\
-    5 & 2.75 m/s & $0.824 \pm 0.019$ & $0.865 \pm 0.013$ & $0.869 \pm 0.004$ \\
-    6 & 3.25 m/s & $0.065 \pm 0.047$ & $0.828 \pm 0.021$ & $0.833 \pm 0.010$ \\
-    7 & 3.75 m/s & $0.000 \pm 0.000$ & $0.704 \pm 0.012$ & $0.708 \pm 0.021$ \\
+    0 & 0.25 m/s & $0.927 \pm 0.000$ & $0.925 \pm 0.001$ & $0.922 \pm 0.001$ \\
+    1 & 0.75 m/s & $0.921 \pm 0.000$ & $0.917 \pm 0.001$ & $0.918 \pm 0.001$ \\
+    2 & 1.25 m/s & $0.914 \pm 0.001$ & $0.911 \pm 0.001$ & $0.914 \pm 0.001$ \\
+    3 & 1.75 m/s & $0.904 \pm 0.001$ & $0.901 \pm 0.001$ & $0.904 \pm 0.001$ \\
+    4 & 2.25 m/s & $0.892 \pm 0.001$ & $0.888 \pm 0.001$ & $0.890 \pm 0.001$ \\
+    5 & 2.75 m/s & $0.820 \pm 0.007$ & $0.864 \pm 0.001$ & $0.868 \pm 0.002$ \\
+    6 & 3.25 m/s & $0.058 \pm 0.010$ & $0.827 \pm 0.002$ & $0.830 \pm 0.003$ \\
+    7 & 3.75 m/s & $0.000 \pm 0.000$ & $0.703 \pm 0.003$ & $0.698 \pm 0.010$ \\
     \bottomrule
     \end{tabular}
-    \caption{Per-bin tracking reward $R_j$, mean $\pm$ std across three seeds, sprint-retune reward.}
+    \captionof{table}{Per-bin tracking reward $R_j$, sprint-retune reward. Each entry is the mean $\pm$ standard deviation over the last 200 PPO iterations of the curve obtained by averaging the three seeds.}
     \label{tab:phase1_rlin}
-    \end{table}
+    \end{center}
 
-    \begin{table}[ht]
-    \centering
+    \begin{center}
     \begin{tabular}{@{}r r c c c@{}}
     \toprule
     \textbf{Bin} & $v_x^{\mathrm{cmd}}$ & \textbf{Uniform} & \textbf{Task-specific} & \textbf{Teacher-guided} \\
     \midrule
     0 & 0.25 m/s & 30   & 20  & 22 \\
-    1 & 0.75 m/s & 214  & 134 & 200 \\
-    2 & 1.25 m/s & 280  & 178 & 290 \\
-    3 & 1.75 m/s & 340  & 234 & 370 \\
-    4 & 2.25 m/s & 532  & 284 & 474 \\
-    5 & 2.75 m/s & 1044 & 334 & 576 \\
-    6 & 3.25 m/s & not mastered (0/3) & 514 (3/3)  & 874 (3/3)  \\
-    7 & 3.75 m/s & not mastered (0/3) & 1136 (3/3) & 1340 (3/3) \\
+    1 & 0.75 m/s & 214  & 134 & 196 \\
+    2 & 1.25 m/s & 280  & 186 & 286 \\
+    3 & 1.75 m/s & 340  & 232 & 370 \\
+    4 & 2.25 m/s & 534  & 284 & 466 \\
+    5 & 2.75 m/s & 984  & 334 & 576 \\
+    6 & 3.25 m/s & not mastered (0/3) & 510 (3/3)  & 836 (3/3)  \\
+    7 & 3.75 m/s & not mastered (0/3) & 1100 (3/3) & 1742 (3/3) \\
     \bottomrule
     \end{tabular}
-    \caption{Iterations-to-mastery per (condition, bin) cell, sprint-retune reward.}
+    \captionof{table}{Iterations-to-mastery per (condition, bin) cell, sprint-retune reward.}
     \label{tab:phase1_itm}
-    \end{table}
+    \end{center}
 
     \textbf{Why bins 0--5 are indistinguishable.} Moderate-speed tracking is not the binding constraint within this budget. All three operators provide enough compute at each slow bin to saturate the tracking kernel, so the sampling strategy does not matter below $2.75$ m/s. The slight bin-monotone decrease in $R_j$ is a Jensen artefact. The same absolute velocity error produces a smaller exponential value at higher commanded speeds.
 
@@ -158,8 +157,7 @@
 
     Tables~\ref{tab:phase1_epte} and \ref{tab:phase1_vvscmd} report EPTE-SP, fall fraction, and mean achieved velocity at deterministic rollout.
 
-    \begin{table}[ht]
-    \centering
+    \begin{center}
     \begin{tabular}{@{}r r c c c@{}}
     \toprule
     \textbf{Bin} & $v_x^{\mathrm{cmd}}$ & \textbf{Uniform EPTE / fall\%} & \textbf{Task-spec EPTE / fall\%} & \textbf{Teacher EPTE / fall\%} \\
@@ -174,14 +172,13 @@
     7 & 3.75 m/s & $1.000$ / $100\%$ & $0.536$ / $50\%$  & $0.228$ / $17\%$ \\
     \bottomrule
     \end{tabular}
-    \caption{EPTE-SP and fall fraction, sprint-retune reward. Mean across three seeds.}
+    \captionof{table}{EPTE-SP and fall fraction, sprint-retune reward. Mean across three seeds.}
     \label{tab:phase1_epte}
-    \end{table}
+    \end{center}
 
     \textbf{Why bin 0 reads ${\sim}0.4$.} EPTE-SP normalises the absolute velocity error by $v^{\mathrm{cmd}}$. At bin 0 ($v^{\mathrm{cmd}} = 0.25$ m/s), a tracking gap of $0.06$--$0.07$ m/s inflates to ${\sim}25\%$ per step. At bin 3 ($v^{\mathrm{cmd}} = 1.75$ m/s) the same gap normalises to ${\sim}3\%$. Step-to-step variance in $v_x$ pushes the time-average to ${\sim}0.4$ at bin 0. This is a normalisation artefact common to both rewards and all conditions. The fall fraction at bin 0 is below $2\%$ throughout.
 
-    \begin{table}[H]
-    \centering
+    \begin{center}
     \begin{tabular}{@{}r r c c c@{}}
     \toprule
     \textbf{Bin} & $v_x^{\mathrm{cmd}}$ & \textbf{Uniform} $\bar v_x$ & \textbf{Task-specific} $\bar v_x$ & \textbf{Teacher-guided} $\bar v_x$ \\
@@ -196,9 +193,9 @@
     7 & 3.75 m/s & 0.08 m/s & 1.81 m/s & 2.97 m/s \\
     \bottomrule
     \end{tabular}
-    \caption{Mean achieved forward velocity $\bar v_x$ per bin, sprint-retune reward.}
+    \captionof{table}{Mean achieved forward velocity $\bar v_x$ per bin, sprint-retune reward.}
     \label{tab:phase1_vvscmd}
-    \end{table}
+    \end{center}
 
     \begin{figure}[H]
     \centering
@@ -260,8 +257,7 @@
 
     \textbf{Step 1. Random-action diagnostic.} The Go2 is run for 1000 steps under a uniformly-random joint-action policy. Each candidate $\sigma_{\mathrm{en},x}$ is plugged into equation~\eqref{eq:energy} and the mean $R_{\mathrm{en}}$ is computed. Values in the target band $[0.3,\,0.75]$ are in the steep region of the exponential and will give a live gradient during training. Values outside give a flat gradient. Random actions represent the worst case, where power is high and forward velocity is near zero, so $R_{\mathrm{en}}$ is at its minimum. A $\sigma_{\mathrm{en},x}$ that lands the random-action mean inside the steep region is guaranteed to remain in or above the steep region for all of training, because every gait improvement reduces the power-to-velocity ratio.
 
-    \begin{table}[ht]
-    \centering
+    \begin{center}
     \begin{tabular}{@{}r r r l@{}}
     \toprule
     $\sigma_{\mathrm{en},x}$ & mean $R_{\mathrm{en}}$ & std $R_{\mathrm{en}}$ & regime \\
@@ -275,16 +271,15 @@
     $5000$ & $0.895$ & $0.099$ & weak gradient \\
     \bottomrule
     \end{tabular}
-    \caption{Step 1 random-action diagnostic on the Go2.}
+    \captionof{table}{Step 1 random-action diagnostic on the Go2.}
     \label{tab:step1}
-    \end{table}
+    \end{center}
 
     Step 1 identifies $\sigma_{\mathrm{en},x} \in \{500,\,1000\}$ as in-band. Note that the Go1 default of $1000$ is already viable for the Go2, but $500$ is also valid. The broader question of which $(\sigma_v, \alpha_{\mathrm{en}})$ combination produces best tracking while maintaining a non-degenerate gait differential requires short training runs.
 
     \textbf{Step 2. Short training grid.} Three $\sigma_{\mathrm{en},x}$ values from Step 1 are crossed with three $(\sigma_v,\,\alpha_{\mathrm{en}})$ choices. Each of the $3\times3=9$ combinations is trained for 1500 PPO iterations under uniform sampling. The selection criterion is minimum summed per-bin tracking error, subject to a non-degenerate duty-factor differential ($\beta_{b_0} - \beta_{b_4}$) confirming the energy term is actively shaping the gait.
 
-    \begin{table}[H]
-    \centering
+    \begin{center}
     \begin{tabular}{@{}c r r r r r r@{}}
     \toprule
     \textbf{Run} & $\sigma_{\mathrm{en},x}$ & $\sigma_v$ & $\alpha_{\mathrm{en}}$ & $\sum_j\,\mathrm{err}$ & $\beta_{b_0}\!-\!\beta_{b_4}$ & t (min) \\
@@ -300,9 +295,9 @@
     9 & $1000$ & $1.0$ & $0.5$ & $1.585$ & $0.104$ & $32.0$ \\
     \bottomrule
     \end{tabular}
-    \caption{Step 2 calibration grid.}
+    \captionof{table}{Step 2 calibration grid.}
     \label{tab:step2}
-    \end{table}
+    \end{center}
 
     \textbf{Why Run 7 wins.} The $\sigma_v$ choice dominates. All $\sigma_v = 0.5$ rows (Runs 1--3) have summed tracking error $2.3$--$2.9$, well above the $\sigma_v = 1.0$ rows ($1.5$--$1.8$). A wider tracking kernel gives the policy a non-zero gradient over a much larger velocity-error window, stabilising early learning. Within the $\sigma_v = 1.0$ rows, Run 7 has the lowest summed error ($1.537$) and a non-degenerate duty differential ($0.143$). Reducing $\alpha_{\mathrm{en}}$ from $1.0$ to $0.5$ (Run 7 vs Runs 4--6) also leaves more headroom for curriculum to act as the binding constraint on sprint velocity.
 
@@ -323,58 +318,55 @@
 
     Tables~\ref{tab:phase2_rlin} and \ref{tab:phase2_itm} report per-bin tracking reward and iterations-to-mastery.
 
-    \begin{table}[ht]
-    \centering
+    \begin{center}
     \begin{tabular}{@{}r r c c c@{}}
     \toprule
     \textbf{Bin} & $v_x^{\mathrm{cmd}}$ & \textbf{Uniform} & \textbf{Task-specific} & \textbf{Teacher-guided} \\
     \midrule
-    0 & 0.25 m/s & $0.976 \pm 0.001$ & $0.975 \pm 0.001$ & $0.975 \pm 0.002$ \\
-    1 & 0.75 m/s & $0.971 \pm 0.002$ & $0.970 \pm 0.002$ & $0.970 \pm 0.000$ \\
-    2 & 1.25 m/s & $0.959 \pm 0.002$ & $0.960 \pm 0.001$ & $0.958 \pm 0.000$ \\
-    3 & 1.75 m/s & $0.946 \pm 0.001$ & $0.947 \pm 0.001$ & $0.946 \pm 0.001$ \\
-    4 & 2.25 m/s & $0.934 \pm 0.001$ & $0.935 \pm 0.002$ & $0.936 \pm 0.000$ \\
-    5 & 2.75 m/s & $0.912 \pm 0.003$ & $0.916 \pm 0.003$ & $0.918 \pm 0.002$ \\
-    6 & 3.25 m/s & $0.816 \pm 0.002$ & $0.863 \pm 0.016$ & $0.858 \pm 0.006$ \\
-    7 & 3.75 m/s & $0.001 \pm 0.000$ & $0.703 \pm 0.018$ & $0.693 \pm 0.016$ \\
+    0 & 0.25 m/s & $0.976 \pm 0.001$ & $0.975 \pm 0.001$ & $0.975 \pm 0.000$ \\
+    1 & 0.75 m/s & $0.971 \pm 0.001$ & $0.970 \pm 0.000$ & $0.970 \pm 0.000$ \\
+    2 & 1.25 m/s & $0.958 \pm 0.001$ & $0.960 \pm 0.000$ & $0.957 \pm 0.001$ \\
+    3 & 1.75 m/s & $0.946 \pm 0.002$ & $0.947 \pm 0.001$ & $0.945 \pm 0.001$ \\
+    4 & 2.25 m/s & $0.934 \pm 0.001$ & $0.935 \pm 0.001$ & $0.935 \pm 0.001$ \\
+    5 & 2.75 m/s & $0.911 \pm 0.002$ & $0.917 \pm 0.002$ & $0.917 \pm 0.001$ \\
+    6 & 3.25 m/s & $0.811 \pm 0.005$ & $0.867 \pm 0.004$ & $0.859 \pm 0.002$ \\
+    7 & 3.75 m/s & $0.001 \pm 0.001$ & $0.706 \pm 0.006$ & $0.696 \pm 0.005$ \\
     \bottomrule
     \end{tabular}
-    \caption{Per-bin tracking reward $R_j$, mean $\pm$ std across three seeds, energy-regularised reward.}
+    \captionof{table}{Per-bin tracking reward $R_j$, energy-regularised reward. Each entry is the mean $\pm$ standard deviation over the last 200 PPO iterations of the curve obtained by averaging the three seeds.}
     \label{tab:phase2_rlin}
-    \end{table}
+    \end{center}
 
-    \begin{table}[ht]
-    \centering
+    \begin{center}
     \begin{tabular}{@{}r r c c c@{}}
     \toprule
     \textbf{Bin} & $v_x^{\mathrm{cmd}}$ & \textbf{Uniform} & \textbf{Task-specific} & \textbf{Teacher-guided} \\
     \midrule
     0 & 0.25 m/s & 24  & 22  & 22 \\
-    1 & 0.75 m/s & 66  & 98  & 68 \\
-    2 & 1.25 m/s & 244 & 200 & 268 \\
-    3 & 1.75 m/s & 294 & 254 & 352 \\
-    4 & 2.25 m/s & 376 & 312 & 442 \\
-    5 & 2.75 m/s & 450 & 386 & 558 \\
-    6 & 3.25 m/s & 614 & 552 & 694 \\
-    7 & 3.75 m/s & not mastered (0/3) & 1212 (3/3) & 1026 (3/3) \\
+    1 & 0.75 m/s & 66  & 96  & 72 \\
+    2 & 1.25 m/s & 254 & 196 & 266 \\
+    3 & 1.75 m/s & 324 & 252 & 350 \\
+    4 & 2.25 m/s & 374 & 302 & 442 \\
+    5 & 2.75 m/s & 462 & 386 & 558 \\
+    6 & 3.25 m/s & 614 & 526 & 706 \\
+    7 & 3.75 m/s & not mastered (0/3) & 1232 (3/3) & 1318 (3/3) \\
     \bottomrule
     \end{tabular}
-    \caption{Iterations-to-mastery per (condition, bin) cell, energy-regularised reward.}
+    \captionof{table}{Iterations-to-mastery per (condition, bin) cell, energy-regularised reward.}
     \label{tab:phase2_itm}
-    \end{table}
+    \end{center}
 
     \textbf{Why the plateau lifts uniformly.} The energy-regularised reward uses a wider tracking kernel ($\sigma_v = 1.0$ vs $0.5$ in Phase 1), which gives the policy a live gradient over a much larger velocity-error window. This lifts the training-time plateau substantially across bins 0--6 for all conditions. The cost-of-transport energy block also contributes by pushing the policy toward coordinated gaits that track the command more efficiently.
 
     \textbf{Why uniform masters bins 0--6 but not bin 7.} The cost-of-transport gradient makes a coordinated gait at $3.25$ m/s findable within the flat-sampling compute budget for bin 6, a dramatic improvement over Phase 1. But bin 7 at $3.75$ m/s requires even faster motion, and flat sampling leaves too few remaining iterations to find it. The energy gradient alone cannot compensate for insufficient sampling at the hardest command.
 
-    \textbf{Teacher-guided masters bin 7 before task-specific.} Under the energy reward, bins 0--6 plateau quickly because the cost-of-transport gradient makes coordinated gaits easy to find. Teacher-guided detects this stagnation and reallocates compute to bin 7 earlier, reversing the Phase 1 ITM ordering. Task-specific must wait for the full sequential expansion chain to confirm mastery through bin 6 before bin 7 enters the support.
+    \textbf{Task-specific and teacher-guided master bin 7 within seed-noise of each other.} Under the energy reward, bins 0--6 plateau quickly because the cost-of-transport gradient makes coordinated gaits easy to find. At bin 7 task-specific masters first at $1232$ iterations and teacher-guided follows at $1318$, the same ordering as the sprint-retune reward and a gap that sits within seed-to-seed noise. Uniform never crosses the threshold at bin 7 within budget, because its flat $1/8$ share leaves too few iterations to find a gait that sustains $3.75$ m/s.
 
     \subsection{The Two-Factor Picture}
 
     Table~\ref{tab:summary} is the central result of this experiment. Reading across rows (same curriculum, different reward) shows what the reward does. Reading down blocks (same reward, different curriculum) shows what the curriculum does.
 
-    \begin{table}[ht]
-    \centering
+    \begin{center}
     \begin{tabular}{@{}l l c r@{}}
     \toprule
     \textbf{Curriculum} & \textbf{Reward} & \textbf{Fall\% at $b_7$} & \textbf{$\bar v_x$ at $b_7$ (cmd: $3.75$ m/s)} \\
@@ -388,16 +380,15 @@
     Teacher-guided & Energy-regularised & $0\%$   & $3.29$ m/s \\
     \bottomrule
     \end{tabular}
-    \caption{Sprint-bin ($b_7$, cmd $3.75$ m/s) outcomes, all six (curriculum, reward) combinations.}
+    \captionof{table}{Sprint-bin ($b_7$, cmd $3.75$ m/s) outcomes, all six (curriculum, reward) combinations.}
     \label{tab:summary}
-    \end{table}
+    \end{center}
 
     The two factors act on independent dimensions of performance and cannot substitute for each other. Reward shaping removes the destabilising contact patterns that cause falls, but cannot drive the policy toward velocities it was rarely trained on. Curriculum ensures the sprint bins receive enough gradient attempts to find a fast gait, but cannot constrain the quality of motion once the policy gets there. Fixing one failure mode leaves the other intact.
 
     Tables~\ref{tab:phase2_epte} and \ref{tab:phase2_vvscmd} provide the full per-bin evaluation breakdown including mean achieved velocity.
 
-    \begin{table}[ht]
-    \centering
+    \begin{center}
     \begin{tabular}{@{}r r c c c@{}}
     \toprule
     \textbf{Bin} & $v_x^{\mathrm{cmd}}$ & \textbf{Uniform EPTE / fall\%} & \textbf{Task-spec EPTE / fall\%} & \textbf{Teacher EPTE / fall\%} \\
@@ -412,12 +403,11 @@
     7 & 3.75 m/s & $0.857$ / $0\%$ & $0.385$ / $0\%$ & $0.126$ / $0\%$ \\
     \bottomrule
     \end{tabular}
-    \caption{EPTE-SP and fall fraction, energy-regularised reward.}
+    \captionof{table}{EPTE-SP and fall fraction, energy-regularised reward.}
     \label{tab:phase2_epte}
-    \end{table}
+    \end{center}
 
-    \begin{table}[H]
-    \centering
+    \begin{center}
     \begin{tabular}{@{}r r c c c@{}}
     \toprule
     \textbf{Bin} & $v_x^{\mathrm{cmd}}$ & \textbf{Uniform} $\bar v_x$ & \textbf{Task-specific} $\bar v_x$ & \textbf{Teacher-guided} $\bar v_x$ \\
@@ -432,9 +422,9 @@
     7 & 3.75 m/s & 0.54 m/s & 2.31 m/s & 3.29 m/s \\
     \bottomrule
     \end{tabular}
-    \caption{Mean achieved forward velocity $\bar v_x$ per bin, energy-regularised reward.}
+    \captionof{table}{Mean achieved forward velocity $\bar v_x$ per bin, energy-regularised reward.}
     \label{tab:phase2_vvscmd}
-    \end{table}
+    \end{center}
 
     \textbf{Why the energy reward eliminates falls.} Under the sprint-retune reward, the policy could adopt any contact pattern that produced forward motion, including high-frequency oscillations that scored well stochastically but collapsed without action noise. The energy penalty directly charges the policy for erratic, high-amplitude actuation, where $\sum_i|\tau_i||\dot q_i|$ is large for oscillatory motion. The penalty drives the policy to smoother, mechanically regular gaits that are inherently more robust to the removal of action noise.
 

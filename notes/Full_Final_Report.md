@@ -478,22 +478,22 @@ Table 4.1 reports the smoothed per-bin tracking reward $R_j$ at the end of train
 
 | Bin | $v_x^{\mathrm{cmd}}$ | Uniform | Task-specific | Teacher-guided |
 |---:|---:|---:|---:|---:|
-| 0 | 0.25 m/s | $0.927 \pm 0.003$ | $0.925 \pm 0.005$ | $0.922 \pm 0.005$ |
-| 1 | 0.75 m/s | $0.920 \pm 0.001$ | $0.917 \pm 0.006$ | $0.918 \pm 0.003$ |
-| 2 | 1.25 m/s | $0.913 \pm 0.002$ | $0.911 \pm 0.008$ | $0.914 \pm 0.003$ |
-| 3 | 1.75 m/s | $0.904 \pm 0.002$ | $0.901 \pm 0.008$ | $0.904 \pm 0.003$ |
-| 4 | 2.25 m/s | $0.892 \pm 0.002$ | $0.888 \pm 0.008$ | $0.890 \pm 0.002$ |
-| 5 | 2.75 m/s | $0.824 \pm 0.019$ | $0.865 \pm 0.013$ | $0.869 \pm 0.004$ |
-| 6 | 3.25 m/s | $0.065 \pm 0.047$ | $0.828 \pm 0.021$ | $0.833 \pm 0.010$ |
-| 7 | 3.75 m/s | $0.000 \pm 0.000$ | $0.704 \pm 0.012$ | $0.708 \pm 0.021$ |
+| 0 | 0.25 m/s | $0.927 \pm 0.000$ | $0.925 \pm 0.001$ | $0.922 \pm 0.001$ |
+| 1 | 0.75 m/s | $0.921 \pm 0.000$ | $0.917 \pm 0.001$ | $0.918 \pm 0.001$ |
+| 2 | 1.25 m/s | $0.914 \pm 0.001$ | $0.911 \pm 0.001$ | $0.914 \pm 0.001$ |
+| 3 | 1.75 m/s | $0.904 \pm 0.001$ | $0.901 \pm 0.001$ | $0.904 \pm 0.001$ |
+| 4 | 2.25 m/s | $0.892 \pm 0.001$ | $0.888 \pm 0.001$ | $0.890 \pm 0.001$ |
+| 5 | 2.75 m/s | $0.820 \pm 0.007$ | $0.864 \pm 0.001$ | $0.868 \pm 0.002$ |
+| 6 | 3.25 m/s | $0.058 \pm 0.010$ | $0.827 \pm 0.002$ | $0.830 \pm 0.003$ |
+| 7 | 3.75 m/s | $0.000 \pm 0.000$ | $0.703 \pm 0.003$ | $0.698 \pm 0.010$ |
 
-*Table 4.1: Per-bin tracking reward $R_j$ at end of training, mean $\pm$ std across three seeds, sprint-retune reward of §3.1.4, 3000 PPO iterations per cell. Values are averaged over the last 200 PPO iterations of each run.*
+*Table 4.1: Per-bin tracking reward $R_j$ at end of training, sprint-retune reward of §3.1.4, 3000 PPO iterations per cell. Each entry is the mean $\pm$ standard deviation over the last 200 PPO iterations of the curve obtained by averaging the three seeds.*
 
 For bins 0 through 4 with commands from $0$ to $2.5$ m/s, every condition saturates the per-bin tracking kernel at the same plateau in the range $0.89$ to $0.93$ and there is no separation between the three rules. The plateau is bin-monotone decreasing within each condition. At higher commands the same absolute velocity error translates into a smaller value of $\exp(-|\Delta v|^2/\sigma_{\mathrm{lin}}^2)$, so the ceiling falls from about $0.93$ at bin 0 to about $0.89$ at bin 4 even when the policy tracks the command well.
 
 At bin 5 with commands from $2.5$ to $3.0$ m/s the three rules begin to separate. Uniform sits at $0.82$ while task-specific and teacher-guided sit at $0.87$.
 
-At bins 6 and 7 with commands from $3.0$ to $4.0$ m/s the separation becomes large, and it splits the three conditions into *two* groups rather than three. Task-specific and teacher-guided both clear the mastery threshold $\gamma = 0.7$ at bins 6 and 7, reaching $0.83 / 0.70$ for task-specific and $0.83 / 0.71$ for teacher-guided. Uniform collapses entirely, reaching $0.06$ at bin 6 and $0.00$ at bin 7. Figure 4.1 plots the per-bin learning curves under the sprint-retune reward. Uniform stalls in the first quarter of training at bins 6 and 7 and never recovers. Task-specific and teacher-guided both continue climbing through iteration 3000 at those bins, with no large per-bin gap between the two operators.
+At bins 6 and 7 with commands from $3.0$ to $4.0$ m/s the separation becomes large, and it splits the three conditions into *two* groups rather than three. Task-specific and teacher-guided both clear the mastery threshold $\gamma = 0.7$ at bins 6 and 7, reaching $0.83 / 0.70$ for task-specific and $0.83 / 0.70$ for teacher-guided. Uniform collapses entirely, reaching $0.06$ at bin 6 and $0.00$ at bin 7. Figure 4.1 plots the per-bin learning curves under the sprint-retune reward. Uniform stalls in the first quarter of training at bins 6 and 7 and never recovers. Task-specific and teacher-guided both continue climbing through iteration 3000 at those bins, with no large per-bin gap between the two operators.
 
 ![Per-bin tracking-reward learning curves, sprint-retune reward, three seeds per condition.](../src/results_phase1_rerun/figures/learning_curves_rlin.png)
 
@@ -508,17 +508,17 @@ The iterations-to-mastery metric (first PPO iteration at which the seed-averaged
 | Bin | $v_x^{\mathrm{cmd}}$ | Uniform | Task-specific | Teacher-guided |
 |---:|---:|---:|---:|---:|
 | 0 | 0.25 | 30 | 20 | 22 |
-| 1 | 0.75 | 214 | 134 | 200 |
-| 2 | 1.25 | 280 | 178 | 290 |
-| 3 | 1.75 | 340 | 234 | 370 |
-| 4 | 2.25 | 532 | 284 | 474 |
-| 5 | 2.75 | 1044 | 334 | 576 |
-| 6 | 3.25 | not mastered (0/3) | 514 (3/3) | 874 (3/3) |
-| 7 | 3.75 | not mastered (0/3) | 1136 (3/3) | 1340 (3/3) |
+| 1 | 0.75 | 214 | 134 | 196 |
+| 2 | 1.25 | 280 | 186 | 286 |
+| 3 | 1.75 | 340 | 232 | 370 |
+| 4 | 2.25 | 534 | 284 | 466 |
+| 5 | 2.75 | 984 | 334 | 576 |
+| 6 | 3.25 | not mastered (0/3) | 510 (3/3) | 836 (3/3) |
+| 7 | 3.75 | not mastered (0/3) | 1100 (3/3) | 1742 (3/3) |
 
 *Table 4.2: Iterations-to-mastery per (condition, bin) cell, computed as the first PPO iteration at which the seed-averaged $R_j$ crosses $\gamma = 0.7$. The fraction of seeds that reached mastery individually is shown in parentheses where it is below 3/3.*
 
-Bins 0 through 5 are mastered by every condition. Task-specific reaches every one of these bins faster than uniform, because once a bin's mastery threshold is crossed, the support has already expanded to include it and the operator focuses sampling on the new edge. Teacher-guided is comparable to uniform on bins 1 through 4 because the LP-ACRL temperature keeps probability mass spread across all bins as long as multiple bins still show positive learning progress, and it pulls ahead on bins 5, 6, and 7 once the lower bins plateau. Task-specific reaches bins 6 and 7 earlier than teacher-guided, at $514$ versus $874$ at bin 6 and $1136$ versus $1340$ at bin 7, but both operators master both sprint bins within the budget. Uniform masters neither.
+Bins 0 through 5 are mastered by every condition. Task-specific reaches every one of these bins faster than uniform, because once a bin's mastery threshold is crossed, the support has already expanded to include it and the operator focuses sampling on the new edge. Teacher-guided is comparable to uniform on bins 1 through 4 because the LP-ACRL temperature keeps probability mass spread across all bins as long as multiple bins still show positive learning progress, and it pulls ahead on bins 5, 6, and 7 once the lower bins plateau. Task-specific reaches bins 6 and 7 earlier than teacher-guided, at $510$ versus $836$ at bin 6 and $1100$ versus $1742$ at bin 7, but both operators master both sprint bins within the budget. Uniform masters neither.
 
 ![Iterations-to-mastery, sprint-retune reward. Bars truncated at 3000 indicate the bin was not mastered within the budget.](../src/results_phase1_rerun/figures/iterations_to_mastery.png)
 
@@ -536,13 +536,13 @@ Table 4.3 reports the per-bin EPTE-SP from the deterministic evaluation rollouts
 
 | Bin | $v_x^{\mathrm{cmd}}$ | Uniform EPTE-SP / fall% | Task-specific EPTE-SP / fall% | Teacher EPTE-SP / fall% |
 |---:|---:|---:|---:|---:|
-| 0 | 0.25 | $0.423$ / $0\%$ | $0.421$ / $1\%$ | $0.368$ / $2\%$ |
-| 1 | 0.75 | $0.113$ / $0\%$ | $0.103$ / $0\%$ | $0.082$ / $0\%$ |
-| 2 | 1.25 | $0.074$ / $0\%$ | $0.074$ / $0\%$ | $0.052$ / $0\%$ |
-| 3 | 1.75 | $0.061$ / $0\%$ | $0.062$ / $0\%$ | $0.052$ / $0\%$ |
-| 4 | 2.25 | $0.068$ / $0\%$ | $0.070$ / $0\%$ | $0.064$ / $0\%$ |
-| 5 | 2.75 | $0.151$ / $9\%$ | $0.067$ / $0\%$ | $0.066$ / $0\%$ |
-| 6 | 3.25 | $0.977$ / $98\%$ | $0.537$ / $50\%$ | $0.187$ / $13\%$ |
+| 0 | 0.25 | $0.424$ / $0\%$ | $0.421$ / $1\%$ | $0.368$ / $2\%$ |
+| 1 | 0.75 | $0.117$ / $0\%$ | $0.103$ / $0\%$ | $0.082$ / $0\%$ |
+| 2 | 1.25 | $0.078$ / $0\%$ | $0.074$ / $0\%$ | $0.052$ / $0\%$ |
+| 3 | 1.75 | $0.063$ / $0\%$ | $0.062$ / $0\%$ | $0.052$ / $0\%$ |
+| 4 | 2.25 | $0.069$ / $0\%$ | $0.070$ / $0\%$ | $0.064$ / $0\%$ |
+| 5 | 2.75 | $0.139$ / $9\%$ | $0.067$ / $0\%$ | $0.066$ / $0\%$ |
+| 6 | 3.25 | $0.982$ / $98\%$ | $0.537$ / $50\%$ | $0.187$ / $13\%$ |
 | 7 | 3.75 | $1.000$ / $100\%$ | $0.536$ / $50\%$ | $0.228$ / $17\%$ |
 
 *Table 4.3: Per-bin EPTE-SP and fall fraction at deterministic evaluation, averaged across three seeds and 300 rollouts per cell, sprint-retune reward.*
@@ -738,20 +738,20 @@ Table 4.6 reports the smoothed per-bin tracking reward $R_j$ at the end of train
 
 | Bin | $v_x^{\mathrm{cmd}}$ | Uniform | Task-specific | Teacher-guided |
 |---:|---:|---:|---:|---:|
-| 0 | 0.25 m/s | $0.976 \pm 0.001$ | $0.975 \pm 0.001$ | $0.975 \pm 0.002$ |
-| 1 | 0.75 m/s | $0.971 \pm 0.002$ | $0.970 \pm 0.002$ | $0.970 \pm 0.000$ |
-| 2 | 1.25 m/s | $0.959 \pm 0.002$ | $0.960 \pm 0.001$ | $0.958 \pm 0.000$ |
-| 3 | 1.75 m/s | $0.946 \pm 0.001$ | $0.947 \pm 0.001$ | $0.946 \pm 0.001$ |
-| 4 | 2.25 m/s | $0.934 \pm 0.001$ | $0.935 \pm 0.002$ | $0.936 \pm 0.000$ |
-| 5 | 2.75 m/s | $0.912 \pm 0.003$ | $0.916 \pm 0.003$ | $0.918 \pm 0.002$ |
-| 6 | 3.25 m/s | $0.816 \pm 0.002$ | $0.863 \pm 0.016$ | $0.858 \pm 0.006$ |
-| 7 | 3.75 m/s | $0.001 \pm 0.000$ | $0.703 \pm 0.018$ | $0.693 \pm 0.016$ |
+| 0 | 0.25 m/s | $0.976 \pm 0.001$ | $0.975 \pm 0.001$ | $0.975 \pm 0.000$ |
+| 1 | 0.75 m/s | $0.971 \pm 0.001$ | $0.970 \pm 0.000$ | $0.970 \pm 0.000$ |
+| 2 | 1.25 m/s | $0.958 \pm 0.001$ | $0.960 \pm 0.000$ | $0.957 \pm 0.001$ |
+| 3 | 1.75 m/s | $0.946 \pm 0.002$ | $0.947 \pm 0.001$ | $0.945 \pm 0.001$ |
+| 4 | 2.25 m/s | $0.934 \pm 0.001$ | $0.935 \pm 0.001$ | $0.935 \pm 0.001$ |
+| 5 | 2.75 m/s | $0.911 \pm 0.002$ | $0.917 \pm 0.002$ | $0.917 \pm 0.001$ |
+| 6 | 3.25 m/s | $0.811 \pm 0.005$ | $0.867 \pm 0.004$ | $0.859 \pm 0.002$ |
+| 7 | 3.75 m/s | $0.001 \pm 0.001$ | $0.706 \pm 0.006$ | $0.696 \pm 0.005$ |
 
-*Table 4.6: Per-bin tracking reward $R_j$ at end of training, mean $\pm$ std across three seeds, energy-regularised reward of §4.2.1 with the Run-7 tuple, 3000 PPO iterations per cell. Values are averaged over the last 200 PPO iterations of each run.*
+*Table 4.6: Per-bin tracking reward $R_j$ at end of training, energy-regularised reward of §4.2.1 with the Run-7 tuple, 3000 PPO iterations per cell. Each entry is the mean $\pm$ standard deviation over the last 200 PPO iterations of the curve obtained by averaging the three seeds.*
 
-**What changed from Table 4.1.** The plateau on bins 0 through 6 lifts substantially under the energy-regularised reward and the three conditions become indistinguishable there. Every condition reaches $0.97$–$0.98$ at bin 0 and decreases monotonically with the command to $0.82$–$0.86$ at bin 6, with cross-condition gaps below the seed-to-seed noise. The lift is mainly the wider tracking kernel ($\sigma_v = 1.0$ in the Liang reward vs $\sigma_v = 0.5$ in §3.1.4), which makes $R_{\mathrm{lin}} = \exp(-|\Delta v|^2/\sigma_v)$ saturate near $1$ over a much wider velocity-error window. The bin-monotone decrease is what remains of the same Jensen-type artefact noted in §4.1.1. The kernel $R_{\mathrm{lin}}$ is concave in $\Delta v$, and at higher commands the same fractional error costs more reward.
+**What changed from Table 4.1.** The plateau on bins 0 through 6 lifts substantially under the energy-regularised reward and the three conditions become indistinguishable there. Every condition reaches $0.97$–$0.98$ at bin 0 and decreases monotonically with the command to $0.81$–$0.87$ at bin 6, with cross-condition gaps below the seed-to-seed noise. The lift is mainly the wider tracking kernel ($\sigma_v = 1.0$ in the Liang reward vs $\sigma_v = 0.5$ in §3.1.4), which makes $R_{\mathrm{lin}} = \exp(-|\Delta v|^2/\sigma_v)$ saturate near $1$ over a much wider velocity-error window. The bin-monotone decrease is what remains of the same Jensen-type artefact noted in §4.1.1. The kernel $R_{\mathrm{lin}}$ is concave in $\Delta v$, and at higher commands the same fractional error costs more reward.
 
-**Bin 7 is now the only separator.** Task-specific and teacher-guided both clear $\gamma = 0.7$ at bin 7 ($0.70$ and $0.69$ respectively), and uniform collapses to $0.001$. This is the same qualitative collapse uniform had under the sprint-retune reward, but now isolated to the single sprint bin. The energy-regularised reward closes most of the bin-6 gap that uniform had in Phase 1 (uniform reaches $0.82$ at bin 6 here vs $0.06$ in Table 4.1) because the cost-of-transport gradient now actively pushes the policy toward a coordinated gait. But at bin 7 even the energy reward is not enough. Uniform's $1/8$ share at the highest command leaves the operator with too few iterations to find a gait that can sustain $3.75$ m/s. Curriculum-driven sampling restores it, and at bin 7 task-specific and teacher-guided are within seed-noise of each other in $R_j$.
+**Bin 7 is now the only separator.** Task-specific and teacher-guided both clear $\gamma = 0.7$ at bin 7 ($0.71$ and $0.70$ respectively), and uniform collapses to $0.001$. This is the same qualitative collapse uniform had under the sprint-retune reward, but now isolated to the single sprint bin. The energy-regularised reward closes most of the bin-6 gap that uniform had in Phase 1 (uniform reaches $0.81$ at bin 6 here vs $0.06$ in Table 4.1) because the cost-of-transport gradient now actively pushes the policy toward a coordinated gait. But at bin 7 even the energy reward is not enough. Uniform's $1/8$ share at the highest command leaves the operator with too few iterations to find a gait that can sustain $3.75$ m/s. Curriculum-driven sampling restores it, and at bin 7 task-specific and teacher-guided are within seed-noise of each other in $R_j$.
 
 ![Per-bin tracking-reward learning curves, energy-regularised reward.](../src/results_phase2_rerun/figures/learning_curves_rlin.png)
 
@@ -762,17 +762,17 @@ The iterations-to-mastery metric is summarised in Table 4.7.
 | Bin | $v_x^{\mathrm{cmd}}$ | Uniform | Task-specific | Teacher-guided |
 |---:|---:|---:|---:|---:|
 | 0 | 0.25 | 24 | 22 | 22 |
-| 1 | 0.75 | 66 | 98 | 68 |
-| 2 | 1.25 | 244 | 200 | 268 |
-| 3 | 1.75 | 294 | 254 | 352 |
-| 4 | 2.25 | 376 | 312 | 442 |
-| 5 | 2.75 | 450 | 386 | 558 |
-| 6 | 3.25 | 614 | 552 | 694 |
-| 7 | 3.75 | not mastered (0/3) | 1212 (3/3) | 1026 (3/3) |
+| 1 | 0.75 | 66 | 96 | 72 |
+| 2 | 1.25 | 254 | 196 | 266 |
+| 3 | 1.75 | 324 | 252 | 350 |
+| 4 | 2.25 | 374 | 302 | 442 |
+| 5 | 2.75 | 462 | 386 | 558 |
+| 6 | 3.25 | 614 | 526 | 706 |
+| 7 | 3.75 | not mastered (0/3) | 1232 (3/3) | 1318 (3/3) |
 
 *Table 4.7: Iterations-to-mastery per (condition, bin) cell, energy-regularised reward, computed as the first PPO iteration at which the seed-averaged $R_j$ crosses $\gamma = 0.7$. The fraction of seeds that reached mastery individually is shown in parentheses where it is below 3/3.*
 
-Bins 0 through 6 are mastered by every condition. Task-specific is the fastest on every bin from 2 through 6 because its monotone-expansion rule concentrates samples on the unlocked edge, which coincides with the bins that have the steepest remaining learning progress. Teacher-guided trails task-specific on bins 2–6 because the LP-ACRL temperature keeps probability mass spread across all still-improving bins rather than concentrating on the current edge. Uniform is the slowest on every bin where a gap is visible. At bin 7 the separation sharpens: uniform fails to master at all, while teacher-guided masters first ($1026$) and task-specific masters at $1212$.
+Bins 0 through 6 are mastered by every condition. Task-specific is the fastest on every bin from 2 through 6 because its monotone-expansion rule concentrates samples on the unlocked edge, which coincides with the bins that have the steepest remaining learning progress. Teacher-guided is the slowest of the three on bins 2 through 6 because the LP-ACRL temperature keeps probability mass spread across all still-improving bins rather than concentrating on the current edge, so each individual bin receives fewer samples per iteration. At bin 7 the separation sharpens: uniform fails to master at all, while task-specific masters first ($1232$) and teacher-guided follows at $1318$. The two curriculum operators are within seed-to-seed noise of each other at the sprint bin, and the ordering is the same as under the sprint-retune reward, where task-specific also reached bin 7 before teacher-guided.
 
 
 ![Iterations-to-mastery per (condition, bin), energy-regularised reward.](../src/results_phase2_rerun/figures/iterations_to_mastery.png)
@@ -886,7 +886,7 @@ Findings:
 
 - **Separation lives at the sprint bins. Bins 0 through 5 are indistinguishable.** Under both rewards, all three conditions reach the same per-bin tracking-reward plateau on bins 0–4 (commands up to $2.5$ m/s) and are within seed-noise of each other on per-bin EPTE-SP through bin 5. The operator effect is concentrated at $b_6$ and $b_7$.
 - **Curriculum decides survival. Reward decides velocity at the sprint bin.** Under the sprint-retune reward, uniform is the only condition that does not master $b_6$ or $b_7$ (Tables 4.1, 4.2) and falls in $98$–$100\%$ of deterministic rollouts there (Table 4.3). Task-specific and teacher-guided both clear $\gamma = 0.7$ at both sprint bins, though task-specific still falls $50\%$ of the time at $b_6$/$b_7$ while teacher-guided falls only $13\%$/$17\%$. Under the energy-regularised reward the fall fraction collapses to zero across all three conditions at every bin (Table 4.8). What separates the operators is then the velocity the policy will accept the command at. At $b_7$ the deterministic measured velocity is $\bar v_x = 3.29$ m/s for teacher-guided, $2.31$ m/s for task-specific, and $0.54$ m/s for uniform, against a $3.75$ m/s command (§4.3.2). Uniform under the energy reward solves survival at the sprint bin but not the velocity. It produces a slow Trot instead of sprinting (§4.3.4).
-- **The split is curriculum-vs-uniform, not task-spec-vs-teacher.** On both rewards, task-specific and teacher-guided are within seed-noise on per-bin $R_j$ at $b_6$ and $b_7$ (Tables 4.1, 4.6). Their iterations-to-mastery profiles differ. Task-specific reaches the unlocked edge faster on bins 0 through 6, while teacher-guided masters $b_7$ first under the energy reward ($1026$ vs $1212$, Table 4.7). Teacher-guided holds Trot (walking) at the sprint bin under the energy reward; task-specific shows Trot in two of three seeds, with the best-surviving seed exhibiting Bound (walking) at the sprint bins (§4.3.4). Uniform is the outlier under both rewards.
+- **The split is curriculum-vs-uniform, not task-spec-vs-teacher.** On both rewards, task-specific and teacher-guided are within seed-noise on per-bin $R_j$ at $b_6$ and $b_7$ (Tables 4.1, 4.6). Their iterations-to-mastery profiles differ. Task-specific reaches the unlocked edge faster on bins 0 through 6, and reaches $b_7$ marginally earlier than teacher-guided under the energy reward as well ($1232$ vs $1318$, Table 4.7), though the two operators are within seed-to-seed noise at the sprint bin. Teacher-guided holds Trot (walking) at the sprint bin under the energy reward; task-specific shows Trot in two of three seeds, with the best-surviving seed exhibiting Bound (walking) at the sprint bins (§4.3.4). Uniform is the outlier under both rewards.
 - **Gait family on the Go2 within budget: Trot (walking) dominant, all walking.** Every (condition, bin) cell under the energy-regularised reward has duty factor $\beta > 0.5$ (Table 4.10), so all contact patterns are *walking* gaits in the Hildebrand sense. The dominant pattern across all three conditions and all eight bins is Trot (walking) — diagonal-pair alternation with no flight phase. One seed of task-specific curriculum (seed 2) exhibits a Trot → Walk → Bound progression at bins 4–7, with the fore-pair/hind-pair Bound pattern persisting to the sprint bin ($\bar v_x = 2.31$ m/s, $\beta = 0.59$); the other two seeds show Trot (walking) throughout.
 
 A few caveats apply. Each (condition, seed) is a single run, and spreads are across three seeds, not three replicates. The 3000-iteration budget is short relative to standard practice in this literature (Margolis et al., 2022, trained at the equivalent of $\sim 12000$ iterations on this scale of robot), so the uniform-at-$b_7$ collapse is a budget-bound failure, not necessarily asymptotic. All experiments are flat-ground simulation on a single platform. Transfer to terrain, other quadrupeds, or hardware is not claimed.
